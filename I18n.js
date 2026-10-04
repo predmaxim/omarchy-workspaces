@@ -5,7 +5,8 @@
 var TABLES = {
   ru: {
     "Workspaces": "Рабочие столы",
-    "Not closed: %1": "Не закрыто: %1"
+    "Not closed: %1": "Не закрыто: %1",
+    "No session": "Без сессии"
   }
 }
 
