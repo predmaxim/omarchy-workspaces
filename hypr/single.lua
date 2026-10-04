@@ -111,7 +111,7 @@ local function valid_rules(get_rules)
 end
 
 function M.setup(get_rules)
-  hl.on("window.open", function(w)
+  return hl.on("window.open", function(w)
     if not w then
       return
     end

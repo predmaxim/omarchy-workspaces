@@ -1,5 +1,5 @@
 -- hypr/bind.lua — app → desk rules, a window's place in the scheme, foreign windows.
-local config = require("config")
+local config = require("predmaxim_workspaces.config")
 local M = {}
 
 local function regex(class) return "^(" .. class:gsub("[%-%.%+%*%?%[%]%(%)%^%$|\\]", "\\%0") .. ")$" end

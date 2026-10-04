@@ -1,5 +1,5 @@
 -- hypr/config.lua — config.json of predmaxim.workspaces: defaults, checks, the active desk set.
-local json = require("json")
+local json = require("predmaxim_workspaces.json")
 local M = {}
 
 M.PATH = os.getenv("HOME") .. "/.config/predmaxim.workspaces/config.json"

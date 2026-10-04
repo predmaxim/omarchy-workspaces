@@ -1,6 +1,6 @@
 -- Tests for collapse.plan: lua hypr/collapse_test.lua
-package.path = arg[0]:match("(.*/)") .. "?.lua;" .. package.path
-local collapse = require("collapse")
+local dir = arg[0]:match("(.*/)") or "./"; dofile(dir .. "prefix.lua")(dir)
+local collapse = require("predmaxim_workspaces.collapse")
 
 local failed = 0
 local function show(v)

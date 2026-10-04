@@ -1,6 +1,6 @@
 -- hypr/config_test.lua
-package.path = arg[0]:match("(.*/)") .. "?.lua;" .. package.path
-local config = require("config")
+local dir = arg[0]:match("(.*/)") or "./"; dofile(dir .. "prefix.lua")(dir)
+local config = require("predmaxim_workspaces.config")
 local c = config.parse("{}")
 assert(c.foreignWindow == "tile" and c.collapse == "free" and c.collapseInSession == "free")
 assert(c.sequentialLaunch == false and c.schedule == true and #c.singleInstance == 0)

@@ -1,6 +1,6 @@
 -- Tests for single.decide/validate: lua hypr/single_test.lua
-package.path = arg[0]:match("(.*/)") .. "?.lua;" .. package.path
-local si = require("single")
+local dir = arg[0]:match("(.*/)") or "./"; dofile(dir .. "prefix.lua")(dir)
+local si = require("predmaxim_workspaces.single")
 
 local failed = 0
 local function show(v)

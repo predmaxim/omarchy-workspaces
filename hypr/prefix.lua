@@ -1,0 +1,19 @@
+-- hypr/prefix.lua — makes require("predmaxim_workspaces.<name>") load <dir>/<name>.lua and
+-- drops the cached copies, so a `hyprctl reload` (Lua state survives it) re-reads the files.
+-- Usage: dofile(<dir>/prefix.lua)(<dir>)
+return function(dir)
+  for i = #package.searchers, 1, -1 do
+    if debug.getinfo(package.searchers[i], "S").source == debug.getinfo(1, "S").source then
+      table.remove(package.searchers, i) -- our own searcher from a previous run
+    end
+  end
+  table.insert(package.searchers, 2, function(name)
+    local m = name:match("^predmaxim_workspaces%.(.+)$")
+    if not m then return nil end
+    local f, err = loadfile(dir .. m .. ".lua")
+    return f or ("\n\t" .. tostring(err))
+  end)
+  for k in pairs(package.loaded) do
+    if k:match("^predmaxim_workspaces%.") then package.loaded[k] = nil end
+  end
+end

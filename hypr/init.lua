@@ -2,11 +2,11 @@
 -- foreign windows, collapsing, single-instance apps. Settings: config.json (the
 -- plugin's modal writes it and runs `hyprctl reload`, which re-runs this file).
 local dir = debug.getinfo(1, "S").source:sub(2):match("(.*/)")
-package.path = dir .. "?.lua;" .. package.path
-local config = require("config")
-local bind = require("bind")
-local collapse = require("collapse")
-local single = require("single")
+dofile(dir .. "prefix.lua")(dir)
+local config = require("predmaxim_workspaces.config")
+local bind = require("predmaxim_workspaces.bind")
+local collapse = require("predmaxim_workspaces.collapse")
+local single = require("predmaxim_workspaces.single")
 
 local cfg = config.load()
 local function get_cfg() return cfg end
@@ -37,24 +37,56 @@ local function occupied()
   return out
 end
 
-hl.on("window.open", function(w)
-  if not w.workspace or w.floating then return end
-  local ws = tostring(w.workspace.id)
-  local d = desks[ws]
+-- Master schemes: the window of place 1 must be the master, wherever the desk is shown
+-- (hl.dsp.layout acts on the active desk, so swap by address instead).
+local function place_master(ws, d)
+  local tiled, first = {}, nil
+  for _, o in ipairs(hl.get_workspace_windows(ws)) do
+    if not o.floating and o.workspace and o.workspace.id == ws then tiled[#tiled + 1] = o end
+  end
+  local key = bind.layout(d.scheme).orientation == "top" and "y" or "x"
+  local master
+  for _, o in ipairs(tiled) do
+    if not first and bind.slot(d, o.class, {}) == 1 then first = o end
+    if not master or o.at[key] < master.at[key] then master = o end
+  end
+  if first and master and first.address ~= master.address then
+    hl.dispatch(hl.dsp.window.swap({ window = "address:" .. first.address, target = "address:" .. master.address }))
+  end
+end
+
+if predmaxim_workspaces then
+  for _, sub in ipairs(predmaxim_workspaces.subs or {}) do sub:remove() end
+end
+local subs = {}
+local function on(ev, fn) subs[#subs + 1] = hl.on(ev, fn) end
+
+on("window.open", function(w)
+  if not w or not w.workspace or w.floating then return end
+  local id = w.workspace.id
+  local d = desks[tostring(id)]
   if not d then return end
   local taken = {}
-  for _, o in ipairs(hl.get_windows({ workspace = w.workspace.id })) do
-    if o.address ~= w.address then
+  for _, o in ipairs(hl.get_workspace_windows(id)) do
+    if o.address ~= w.address and o.workspace and o.workspace.id == id then
       local i = bind.slot(d, o.class, taken)
       if i then taken[i] = true end
     end
   end
   local i = bind.slot(d, w.class, taken)
   if i then
-    for _, msg in ipairs(bind.place_cmds(d.scheme, i, #d.slots)) do hl.dispatch(hl.dsp.layout(msg)) end
+    if d.scheme == "grid" then
+      local active = hl.get_active_workspace()
+      if active and active.id == id then
+        for _, msg in ipairs(bind.place_cmds(d.scheme, i, #d.slots)) do hl.dispatch(hl.dsp.layout(msg)) end
+      end
+    elseif bind.layout(d.scheme) then
+      -- ponytail: wait for the layout to give the new window its position; 50 ms was enough live.
+      hl.timer(function() place_master(id, d) end, { timeout = 50, type = "oneshot" })
+    end
     return
   end
-  local f = bind.foreign(cfg, desks, ws, occupied())
+  local f = bind.foreign(cfg, desks, tostring(id), occupied())
   local win = "address:" .. w.address
   if f.action == "float" then
     hl.dispatch(hl.dsp.window.float({ window = win, action = "enable" }))
@@ -65,10 +97,10 @@ hl.on("window.open", function(w)
 end)
 
 local function schedule() hl.timer(function() collapse.run(get_cfg, fixed_of) end, { timeout = 50, type = "oneshot" }) end
-hl.on("workspace.removed", schedule)
-hl.on("window.open", schedule)
-hl.on("window.move_to_workspace", schedule)
+on("workspace.removed", schedule)
+on("window.open", schedule)
+on("window.move_to_workspace", schedule)
 
-single.setup(function() return cfg.singleInstance end)
+subs[#subs + 1] = single.setup(function() return cfg.singleInstance end)
 
-predmaxim_workspaces = { reload = function() hl.exec_cmd("hyprctl reload") end }
+predmaxim_workspaces = { subs = subs, reload = function() hl.exec_cmd("hyprctl reload") end }

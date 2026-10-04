@@ -1,7 +1,7 @@
 -- hypr/bind_test.lua
-package.path = arg[0]:match("(.*/)") .. "?.lua;" .. package.path
-local config = require("config")
-local bind = require("bind")
+local dir = arg[0]:match("(.*/)") or "./"; dofile(dir .. "prefix.lua")(dir)
+local config = require("predmaxim_workspaces.config")
+local bind = require("predmaxim_workspaces.bind")
 local cfg = config.parse([[{"workspaces":{
   "1":{"scheme":"main-left","slots":[{"class":"code"},{"class":"firefox"},{"class":"foot"}]},
   "2":{"scheme":"single","slots":[{"class":"chrome-x.y__-Default"}]}}}]])
