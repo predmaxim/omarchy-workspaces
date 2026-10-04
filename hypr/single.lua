@@ -73,18 +73,38 @@ end
 
 -- get_rules() is called on every window.open, so config edits apply without a reload.
 -- Invalid rules are logged and skipped; nothing here raises into Hyprland.
+-- Is the rule safe to run in the handler? Returns true, or false and the reason.
+function M.usable(rule)
+  if type(rule) ~= "table" then
+    return false, "rule is not a table"
+  end
+  local ok, err = pcall(M.validate, { rule })
+  if not ok then
+    return false, (tostring(err):gsub("^.-rule %d+ ", ""))
+  end
+  local field = rule.class ~= nil and rule.class or rule.match
+  if type(field) ~= "string" then
+    return false, "class/match is not a string"
+  end
+  if rule.match and not pcall(string.find, "", rule.match) then
+    return false, "match is not a valid Lua pattern"
+  end
+  return true
+end
+
 local function valid_rules(get_rules)
   local ok, rules = pcall(get_rules)
   if not ok or type(rules) ~= "table" then
+    print("single: cannot read rules: " .. tostring(ok and "not a list" or rules))
     return {}
   end
   local good = {}
   for i, rule in ipairs(rules) do
-    local ok_rule, err = pcall(M.validate, { rule })
-    if ok_rule then
+    local usable, reason = M.usable(rule)
+    if usable then
       good[#good + 1] = rule
     else
-      print(("single: skipping rule %d: %s"):format(i, tostring(err)))
+      print(("single: skipping rule %d: %s"):format(i, reason))
     end
   end
   return good

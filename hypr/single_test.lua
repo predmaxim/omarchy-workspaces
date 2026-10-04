@@ -82,5 +82,11 @@ eq(tostring(msg):find("rule 2", 1, true) ~= nil, true, "validate names the rule 
 -- invalid rule is rejected (setup skips such rules instead of raising)
 assert(not pcall(si.validate, { { action = "focus" } }), "rule without class/match is rejected")
 
+eq({ si.usable({ match = "[", action = "focus" }) }, { false, "match is not a valid Lua pattern" }, "usable: malformed pattern")
+eq({ si.usable({ match = "%", action = "focus" }) }, { false, "match is not a valid Lua pattern" }, "usable: trailing %")
+eq({ si.usable({ class = 5, action = "focus" }) }, { false, "class/match is not a string" }, "usable: non-string class")
+eq(select("#", si.usable({ class = "a", action = "focus" })), 1, "usable: good rule")
+eq((select(2, si.usable({ class = "a", action = "x" }))):find("rule %d") == nil, true, "usable: reason has no index")
+
 if failed > 0 then print(failed .. " failed"); os.exit(1) end
 print("all passed")
