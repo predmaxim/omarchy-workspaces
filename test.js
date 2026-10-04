@@ -43,6 +43,36 @@ assert.deepStrictEqual(plan.launch, [{ ws: "1", slot: 1, app: "code.desktop", cl
 // a removed session in activeSession → plain desks
 assert.deepStrictEqual(Object.keys(M.activeDesks(M.normalize({ activeSession: "Нет", workspaces: { "1": {} } }))), ["1"])
 
+// Edge cases for desks(): skip non-numeric keys and non-object values
+const badDesks = M.normalize({ workspaces: { "foo": { slots: [] }, "1": { slots: [] } } })
+assert.ok("1" in badDesks.workspaces && !("foo" in badDesks.workspaces), "non-numeric key ignored")
+
+// Slots: bad slot filtered out, valid slots kept up to limit
+const badSlots = M.normalize({ workspaces: { "1": { scheme: "left-right", slots: [null, { class: "valid" }] } } })
+assert.deepStrictEqual(badSlots.workspaces["1"].slots, [{ app: undefined, class: "valid" }])
+
+// Name: keep object as-is, else { mode: "number" }
+const nameTests = M.normalize({ workspaces: { "1": { name: { text: "x" } }, "2": { name: "string" }, "3": {} } })
+assert.deepStrictEqual(nameTests.workspaces["1"].name, { text: "x" })
+assert.deepStrictEqual(nameTests.workspaces["2"].name, { mode: "number" })
+assert.deepStrictEqual(nameTests.workspaces["3"].name, { mode: "number" })
+
+// Sessions: skip non-object values
+const badSessions = M.normalize({ sessions: { "Good": { workspaces: {} }, "Bad": null } })
+assert.ok("Good" in badSessions.sessions && !("Bad" in badSessions.sessions), "non-object session dropped")
+
+// sessionPlan: to="" (no session) and from="" (no session)
+const emptyPlan = M.sessionPlan(s, "", "", [{ address: "a", class: "foot", ws: 1 }])
+assert.deepStrictEqual(emptyPlan.close, [], "from='' doesn't close anything")
+
+// Stranger past occupied desk: session desks 1–2, stranger on 2, unvacated window on 3 → stranger goes to 4
+const strangerPast = M.normalize({ sessions: {
+  "A": { workspaces: { "1": { slots: [] }, "2": { slots: [] } } } } })
+const plan2 = M.sessionPlan(strangerPast, "", "A", [
+  { address: "x", class: "stranger", ws: 2 },   // stranger on session desk 2
+  { address: "y", class: "unrelated", ws: 3 }]) // unrelated window on desk 3 (won't be moved)
+assert.deepStrictEqual(plan2.move, [{ addr: "x", ws: 4 }], "stranger skips occupied desk 3")
+
 // translations: every tr("...") in QML and Model.js has a Russian line, no unused ones
 const I = new Function(fs.readFileSync(__dirname + "/I18n.js", "utf8").replace(".pragma library", "") + "; return { TABLES }")()
 const used = new Set()

@@ -10,10 +10,17 @@ var DEFAULTS = { foreignWindow: "tile", collapse: "free", collapseInSession: "fr
 function desks(t) {
   var out = {}
   Object.keys(t || {}).forEach(function(ws) {
-    var d = t[ws] || {}
+    var d = t[ws]
+    if (typeof d !== "object" || d === null || isNaN(Number(ws))) return
     var scheme = PLACES[d.scheme] ? d.scheme : "single"
-    var slots = (Array.isArray(d.slots) ? d.slots : []).filter(function(s) { return s && s.class }).slice(0, PLACES[scheme])
-    out[ws] = { scheme: scheme, slots: slots, name: d.name && d.name.mode ? d.name : { mode: "number" } }
+    var slots = [], slotArr = Array.isArray(d.slots) ? d.slots : []
+    for (var i = 0; i < slotArr.length && i < PLACES[scheme]; i++) {
+      var s = slotArr[i]
+      if (typeof s === "object" && s !== null && typeof s.class === "string" && s.class !== "") {
+        slots.push({ app: s.app, class: s.class })
+      }
+    }
+    out[ws] = { scheme: scheme, slots: slots, name: typeof d.name === "object" && d.name !== null ? d.name : { mode: "number" } }
   })
   return out
 }
@@ -28,10 +35,10 @@ function normalize(raw) {
   c.workspaces = desks(r.workspaces)
   c.sessions = {}
   Object.keys(r.sessions || {}).forEach(function(n) {
-    var s = r.sessions[n] || {}
-    c.sessions[n] = { workspaces: desks(s.workspaces), schedule: s.schedule || null }
+    var s = r.sessions[n]
+    if (typeof s === "object" && s !== null) c.sessions[n] = { workspaces: desks(s.workspaces), schedule: s.schedule || null }
   })
-  c.activeSession = typeof r.activeSession === "string" && c.sessions[r.activeSession] ? r.activeSession : ""
+  c.activeSession = typeof r.activeSession === "string" ? r.activeSession : ""
   return c
 }
 
@@ -78,7 +85,7 @@ function overlaps(sessions) {
 }
 
 function classesOf(ds) {
-  var out = {}
+  var out = Object.create(null)
   Object.keys(ds).forEach(function(ws) { ds[ws].slots.forEach(function(s) { out[s.class] = ws }) })
   return out
 }
@@ -91,14 +98,27 @@ function sessionPlan(c, from, to, windows) {
   var next = to && c.sessions[to] ? c.sessions[to].workspaces : c.workspaces
   var prevCls = classesOf(prev), nextCls = classesOf(next)
   var nums = Object.keys(next).map(Number)
-  var free = (nums.length ? Math.max.apply(null, nums) : 0) + 1
-  var plan = { close: [], move: [], launch: [] }, open = {}
+  var lastDesk = nums.length ? Math.max.apply(null, nums) : 0
+  var plan = { close: [], move: [], launch: [] }, open = {}, moved = {}, occupied = Object.create(null)
+
+  // Track which desks currently hold windows
+  windows.forEach(function(w) { occupied[String(w.ws)] = true })
+
+  var free = lastDesk + 1
   windows.forEach(function(w) {
     if (nextCls[w.class] !== undefined) {
       open[w.class] = true
+      moved[String(w.ws)] = true
       if (String(w.ws) !== nextCls[w.class]) plan.move.push({ addr: w.address, ws: Number(nextCls[w.class]) })
-    } else if (prevCls[w.class] !== undefined) plan.close.push(w.address)
-    else if (next[String(w.ws)]) plan.move.push({ addr: w.address, ws: free++ })
+    } else if (prevCls[w.class] !== undefined) {
+      plan.close.push(w.address)
+    } else if (next[String(w.ws)]) {
+      moved[String(w.ws)] = true
+      // Find next free desk: skip session desks and desks with unmoved windows
+      while (next[String(free)] || (occupied[String(free)] && !moved[String(free)])) free++
+      plan.move.push({ addr: w.address, ws: free })
+      free++
+    }
   })
   Object.keys(next).sort(function(a, b) { return a - b }).forEach(function(ws) {
     next[ws].slots.forEach(function(s, i) {
