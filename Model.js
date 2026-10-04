@@ -166,7 +166,7 @@ function rows(page, c, set, open) {
   }
   out.push({ type: "set" })
   var ds = set && c.sessions[set] ? c.sessions[set].workspaces : c.workspaces
-  if (set) out.push({ type: "schedule" })
+  if (set) out.push({ type: "days" }, { type: "from" }, { type: "to" })
   for (var ws = 1; ws <= 9; ws++) {
     out.push({ type: "desk", ws: ws })
     if (ws !== open) continue
@@ -176,6 +176,9 @@ function rows(page, c, set, open) {
   }
   return out
 }
+
+// The set row's controls: 0 dropdown, 1 "+", 2 trash (only for a session).
+function setCol(col, dx, set) { return Math.max(0, Math.min(set ? 2 : 1, col + dx)) }
 
 // The value next to `value` in `list`, dx steps away, round the list.
 function step(list, value, dx) {

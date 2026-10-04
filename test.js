@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError }")()
+  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, setCol }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -92,7 +92,7 @@ assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 
 const types = r => r.map(x => x.type + (x.ws ? x.ws : "") + (x.slot !== undefined ? "." + x.slot : ""))
 const rc = M.normalize({ sessions: { W: { workspaces: { "2": { scheme: "left-right" } } } }, singleInstance: [{ class: "a" }] })
 assert.deepStrictEqual(types(M.rows("main", rc, "", 0)), ["head", "set", "desk1", "desk2", "desk3", "desk4", "desk5", "desk6", "desk7", "desk8", "desk9"])
-assert.deepStrictEqual(types(M.rows("main", rc, "W", 2)).slice(0, 9), ["head", "set", "schedule", "desk1", "desk2", "name2", "scheme2", "place2.0", "place2.1"])
+assert.deepStrictEqual(types(M.rows("main", rc, "W", 2)).slice(0, 11), ["head", "set", "days", "from", "to", "desk1", "desk2", "name2", "scheme2", "place2.0", "place2.1"])
 assert.deepStrictEqual(types(M.rows("settings", rc, "", 0)), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])
 assert.strictEqual(M.step(["a", "b", "c"], "b", 1), "c"); assert.strictEqual(M.step(["a", "b", "c"], "c", 1), "a"); assert.strictEqual(M.step(["a", "b"], "a", -1), "b")
 const ss = { A: { schedule: { days: [1], from: "09:00", to: "12:00" } }, B: { schedule: null } }
@@ -101,4 +101,6 @@ assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "22:00", to: "02:
 assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "11:00", to: "13:00" }), "overlap:A")
 assert.strictEqual(M.scheduleError(ss, "B", { days: [2], from: "11:00", to: "13:00" }), "")
 assert.strictEqual(M.scheduleError(ss, "A", { days: [1], from: "08:00", to: "10:00" }), "")
+assert.strictEqual(M.setCol(0, 1, ""), 1); assert.strictEqual(M.setCol(1, 1, ""), 1)   // no trash for plain desks
+assert.strictEqual(M.setCol(1, 1, "W"), 2); assert.strictEqual(M.setCol(0, -1, "W"), 0)
 console.log("ok")

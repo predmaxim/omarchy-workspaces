@@ -1,6 +1,7 @@
 import QtQuick
 import "." as Local
 import Quickshell
+import Quickshell.Hyprland
 import Quickshell.Wayland
 import qs.Commons
 import qs.Ui
@@ -35,6 +36,9 @@ Item {
   property string switchTo: ""
   property var draft: ({ days: [], from: "", to: "" })
   property string scheduleError: ""
+  property string setHint: ""      // under the set row: why the session can't be deleted
+  property int setCol: 0           // the set row's control under the cursor (Model.setCol)
+  property int dayCursor: 0        // the day under the cursor in the days row
 
   readonly property var rows: confirming ? [] : Model.rows(page, cfg, set, expanded)
   readonly property var desks: set && cfg.sessions[set] ? cfg.sessions[set].workspaces : cfg.workspaces
@@ -47,7 +51,7 @@ Item {
                                          free: tr("Only free"), all: tr("All"), off: tr("Don't collapse"),
                                          number: tr("Number"), dynamic: tr("By window"), static: tr("Custom"),
                                          focus: tr("Focus"), ask: tr("Ask"), replace: tr("Replace") })
-  readonly property var rowLabels: ({ set: tr("Set"), schedule: tr("Schedule"), name: tr("Name"), scheme: tr("Scheme"),
+  readonly property var rowLabels: ({ set: tr("Set"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
                                       addRule: tr("One app window"), foreignWindow: tr("Foreign window on a laid-out desk"),
                                       collapse: tr("Collapsing without a session"), collapseInSession: tr("Collapsing in a session"),
                                       sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login") })
@@ -59,7 +63,11 @@ Item {
   signal pressRow(int i)
   readonly property alias gate: pointerGate
   function focusKeys() { keyCatcher.forceActiveFocus() }
-  function askDelete() { confirmDelete.opened = true }
+  // The active session isn't deleted: end it first.
+  function askDelete() {
+    if (root.set === root.cfg.activeSession) root.setHint = root.tr("End the session first")
+    else confirmDelete.opened = true
+  }
 
   onOpenedChanged: {
     if (opened) {
@@ -71,7 +79,7 @@ Item {
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     } else if (confirming && service && service.phase === "") service.cancelSwitch()
   }
-  onSetChanged: loadDraft()
+  onSetChanged: { loadDraft(); setHint = ""; setCol = 0 }
   onSetsChanged: if (sets.indexOf(set) < 0) set = ""
   onRowsChanged: if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
   onCursorChanged: {
@@ -155,7 +163,7 @@ Item {
   function toggleDay(d) {
     var days = root.draft.days.slice(), i = days.indexOf(d)
     if (i >= 0) days.splice(i, 1); else days.push(d)
-    days.sort()
+    days.sort(function(a, b) { return a - b })
     root.draft = Object.assign({}, root.draft, { days: days })
     root.saveSchedule()
   }
@@ -167,9 +175,9 @@ Item {
   // Nothing set — no schedule; otherwise only a valid one that overlaps nothing.
   function saveSchedule() {
     var d = root.draft, name = root.set, err = ""
-    if (d.days.length || d.from || d.to) {
-      err = !d.days.length ? "days" : Model.scheduleError(root.cfg.sessions, name, d)
-    }
+    // No time typed yet: nothing to check; with no days either, the schedule goes.
+    if (d.from || d.to) err = !d.days.length ? "days" : Model.scheduleError(root.cfg.sessions, name, d)
+    else if (d.days.length) { root.scheduleError = ""; return }
     root.scheduleError = err === "days" ? root.tr("Pick the days")
       : err === "time" ? root.tr("Time is HH:MM")
       : err === "order" ? root.tr("The end must be after the start")
@@ -195,7 +203,8 @@ Item {
     var r = root.rows[i]
     if (!r) return
     var desk = root.desks[String(r.ws)]
-    if (r.type === "set") root.set = Model.step(root.sets, root.set, dx)
+    if (r.type === "set") { if (!root.adding) root.setCol = Model.setCol(root.setCol, dx, root.set) }
+    else if (r.type === "days") root.dayCursor = Math.max(0, Math.min(6, root.dayCursor + dx))
     else if (r.type === "name") root.setNameMode(r.ws, Model.step(Model.NAME_MODES, desk ? desk.name.mode || "number" : "number", dx))
     else if (r.type === "scheme") root.setScheme(r.ws, Model.step(Model.SCHEMES, desk ? desk.scheme : "single", dx))
     else if (r.type === "choice") root.setOption(r.key, Model.step(Model.CHOICES[r.key], root.cfg[r.key], dx))
@@ -208,13 +217,16 @@ Item {
     if (!r) return
     if (r.type === "head") root.showPage(root.page === "settings" ? "main" : "settings")
     else if (r.type === "desk") root.expanded = root.expanded === r.ws ? 0 : r.ws
-    else if (r.type === "set" || r.type === "schedule" || r.type === "place" || r.type === "addRule") root.pressRow(i)
+    else if (r.type === "set" && root.setCol === 1 && !root.adding) root.adding = true
+    else if (r.type === "set" && root.setCol === 2 && !root.adding) root.askDelete()
+    else if (r.type === "days") root.toggleDay(root.dayCursor + 1)
+    else if (["set", "from", "to", "place", "addRule"].indexOf(r.type) >= 0) root.pressRow(i)
     else if (r.type === "name" && root.desks[String(r.ws)] && root.desks[String(r.ws)].name.mode === "static") root.pressRow(i)
     else root.change(i, 1)
   }
   function remove(i) {
     var r = root.rows[i]
-    if (r && r.type === "set" && root.set) confirmDelete.opened = true
+    if (r && r.type === "set" && root.set) root.askDelete()
     else if (r && r.type === "rule") root.removeRule(r.index)
   }
 
@@ -378,6 +390,14 @@ Item {
             spacing: Style.spacing.xs
             readonly property var plan: root.service ? root.service.pendingPlan : null
             readonly property string phase: root.service ? root.service.phase : ""
+            // The first window of the plan still open (toplevels for the binding).
+            readonly property string closingNow: {
+              if (phase !== "closing" || !plan) return ""
+              void Hyprland.toplevels.values
+              var up = root.service.windowsNow().map(function(w) { return w.address })
+              var left = plan.close.filter(function(w) { return up.indexOf(w.address) >= 0 })
+              return left.length ? left[0].title || left[0].address : "…"
+            }
 
             Repeater {
               model: confirmPage.plan ? confirmPage.plan.close : []
@@ -394,7 +414,7 @@ Item {
             Text {
               visible: text !== ""
               text: confirmPage.phase === "udisks" ? root.tr("Waiting for the flash drive…")
-                  : confirmPage.phase === "closing" ? root.tr("Closing windows…")
+                  : confirmPage.phase === "closing" ? root.tr("Closing: %1", confirmPage.closingNow)
                   : confirmPage.phase === "launching" ? root.tr("Launching…") : ""
               color: root.dim
               font.family: root.font

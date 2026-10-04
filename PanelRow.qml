@@ -33,7 +33,7 @@ CursorSurface {
   hasCursor: row.panel.cursor === index
 
   Connections {
-    target: root
+    target: row.panel
     function onPressRow(i) { if (i === row.index && control.item && control.item.press) control.item.press() }
   }
 
@@ -62,9 +62,9 @@ CursorSurface {
       elide: Text.ElideRight
     }
     Text {
-      visible: row.modelData.type === "schedule" && row.panel.scheduleError !== ""
+      visible: text !== ""
       width: parent.width
-      text: row.panel.scheduleError
+      text: row.modelData.type === "to" ? row.panel.scheduleError : row.modelData.type === "set" ? row.panel.setHint : ""
       color: Color.urgent
       font.family: row.panel.font
       font.pixelSize: Style.font.caption
@@ -77,7 +77,7 @@ CursorSurface {
     anchors.right: parent.right
     anchors.rightMargin: Style.spacing.rowPaddingX
     anchors.verticalCenter: parent.verticalCenter
-    sourceComponent: ({ set: setControl, schedule: scheduleControl, desk: deskControl, name: nameControl, scheme: schemeControl,
+    sourceComponent: ({ set: setControl, days: daysControl, from: timeControl, to: timeControl, desk: deskControl, name: nameControl, scheme: schemeControl,
                         place: placeControl, choice: choiceControl, switch: switchControl, rule: ruleControl, addRule: addRuleControl })[row.modelData.type] || null
 
     Component {
@@ -94,6 +94,7 @@ CursorSurface {
           value: row.panel.set
           foreground: row.panel.fg
           fontFamily: row.panel.font
+          hasCursor: row.hasCursor && row.panel.setCol === 0
           onChanged: function(v) { row.panel.set = v }
           onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { row.panel.focusKeys() })
         }
@@ -107,6 +108,7 @@ CursorSurface {
         }
         IconButton {
           anchors.verticalCenter: parent.verticalCenter
+          hasCursor: row.hasCursor && row.panel.setCol === 1
           iconText: "󰐕"
           tooltipText: row.panel.tr("New session")
           onClicked: row.panel.adding = !row.panel.adding
@@ -114,6 +116,7 @@ CursorSurface {
         IconButton {
           anchors.verticalCenter: parent.verticalCenter
           visible: row.panel.set !== "" && !row.panel.adding
+          hasCursor: row.hasCursor && row.panel.setCol === 2
           iconText: "󰩺"
           tooltipText: row.panel.tr("Delete session")
           onClicked: row.panel.askDelete()
@@ -121,39 +124,37 @@ CursorSurface {
       }
     }
     Component {
-      id: scheduleControl
+      id: daysControl
       Row {
         spacing: Style.space(4)
-        function press() { fromField.forceActiveFocus() }
         Repeater {
           model: row.panel.days
           Button {
             required property string modelData
             required property int index
-            anchors.verticalCenter: parent.verticalCenter
             text: modelData
             selected: row.panel.draft.days.indexOf(index + 1) >= 0
+            hasCursor: row.hasCursor && row.panel.dayCursor === index
             horizontalPadding: Style.space(5)
             foreground: row.panel.fg
             fontFamily: row.panel.font
-            onClicked: row.panel.toggleDay(index + 1)
+            onClicked: { row.panel.dayCursor = index; row.panel.toggleDay(index + 1) }
           }
         }
-        Field {
-          id: fromField
-          width: Style.space(64)
-          placeholderText: row.panel.tr("from")
-          text: row.panel.draft.from
-          maximumLength: 5
-          onEditingFinished: if (text.trim() !== row.panel.draft.from) row.panel.setTime("from", text)
-        }
-        Field {
-          width: Style.space(64)
-          placeholderText: row.panel.tr("to")
-          text: row.panel.draft.to
-          maximumLength: 5
-          onEditingFinished: if (text.trim() !== row.panel.draft.to) row.panel.setTime("to", text)
-        }
+      }
+    }
+    Component {
+      id: timeControl
+      // Enter or Esc gives the keys back to the rows; leaving the field saves.
+      Field {
+        readonly property string key: row.modelData.type
+        function press() { forceActiveFocus() }
+        width: Style.space(80)
+        placeholderText: row.panel.tr("HH:MM")
+        text: row.panel.draft[key]
+        maximumLength: 5
+        onAccepted: row.panel.focusKeys()
+        onEditingFinished: if (text.trim() !== row.panel.draft[key]) row.panel.setTime(key, text)
       }
     }
     Component {

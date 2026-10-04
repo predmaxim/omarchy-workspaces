@@ -13,7 +13,12 @@ var TABLES = {
     "By window": "По окну",
     "Cancel": "Отмена",
     "Close and switch": "Закрыть и сменить",
-    "Closing windows…": "Закрываем окна…",
+    "Closing: %1": "Закрываем: %1",
+    "Days": "Дни",
+    "End the session first": "Сначала завершите сессию",
+    "From": "С",
+    "HH:MM": "ЧЧ:ММ",
+    "To": "До",
     "Collapsing in a session": "Схлопывание в сессии",
     "Collapsing without a session": "Схлопывание без сессии",
     "Custom": "Своё",
@@ -47,7 +52,6 @@ var TABLES = {
     "Regular": "Обычные",
     "Replace": "Заменить",
     "Sat": "Сб",
-    "Schedule": "Расписание",
     "Scheduled session at login": "Сессия по расписанию при входе",
     "Scheme": "Схема",
     "Search…": "Поиск…",
@@ -65,9 +69,7 @@ var TABLES = {
     "Turn off the session?": "Выключить сессию?",
     "Waiting for the flash drive…": "Ждём флешку…",
     "Wed": "Ср",
-    "Window class, Enter to add": "Класс окна, Enter — добавить",
-    "from": "с",
-    "to": "до"
+    "Window class, Enter to add": "Класс окна, Enter — добавить"
   }
 }
 
