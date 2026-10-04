@@ -68,13 +68,7 @@ Panel {
     root.bar.run("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ workspace = \"" + id + "\" })"))
   }
 
-  function appName(cls) {
-    var apps = DesktopEntries.applications.values
-    for (var i = 0; i < apps.length; i++) {
-      if (apps[i].startupClass === cls || apps[i].id === cls) return apps[i].name
-    }
-    return ""
-  }
+  function appName(cls) { return Model.appNameOf(cls, DesktopEntries.applications.values) }
 
   function windowsOf(workspace) {
     if (!workspace) return []

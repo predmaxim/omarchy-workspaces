@@ -78,6 +78,46 @@ function deskLabel(ws, desk, windows, appName) {
   return name ? ws + " " + name : String(ws)
 }
 
+// A window class as people read it: "org.omarchy.agent" → "Agent",
+// "chrome-youtube.com__-Default" (a web app) → "Youtube".
+function prettyClass(cls) {
+  var c = String(cls || ""), web = c.match(/^(?:chrome|brave|chromium|msedge)-(.+?)__/)
+  var part = web ? web[1].replace(/^www\./, "").split(".")[0] : c.split(".").pop()
+  return part ? part.charAt(0).toUpperCase() + part.slice(1) : c
+}
+
+// The app name for a window class from desktop entries [{id, name, startupClass}]:
+// by startupClass, by id without ".desktop", then by the class's last dot-segment
+// (not for web apps — their segments are domains); else prettyClass.
+function appNameOf(cls, entries) {
+  var lc = String(cls || "").toLowerCase(), last = lc.split(".").pop(), web = /__/.test(lc)
+  var low = function(s) { return String(s || "").toLowerCase() }
+  var id = function(e) { return low(e.id).replace(/\.desktop$/, "") }
+  var tests = [function(e) { return low(e.startupClass) === lc }, function(e) { return id(e) === lc }]
+  if (!web && last) tests.push(function(e) { return id(e).split(".").pop() === last || low(e.startupClass).split(".").pop() === last })
+  for (var t = 0; t < tests.length; t++) {
+    var hit = (entries || []).filter(tests[t])[0]
+    if (hit) return hit.name
+  }
+  return prettyClass(cls)
+}
+
+// Rename session `from` to `to` in raw config: same key order, the active one too.
+// {raw} or {error: "empty" | "regular" | "exists" | "missing"}.
+function renameSession(raw, from, to, regularName) {
+  to = String(to || "").trim()
+  var ss = raw && raw.sessions || {}
+  if (!(from in ss)) return { error: "missing" }
+  if (!to) return { error: "empty" }
+  if (to.toLowerCase() === String(regularName || "").toLowerCase() || to === "Regular") return { error: "regular" }
+  if (to !== from && to in ss) return { error: "exists" }
+  var next = JSON.parse(JSON.stringify(raw)), out = {}
+  Object.keys(ss).forEach(function(k) { out[k === from ? to : k] = next.sessions[k] })
+  next.sessions = out
+  if (next.activeSession === from) next.activeSession = to
+  return { raw: next }
+}
+
 function minutes(hhmm) { var p = String(hhmm || "").split(":"); return Number(p[0]) * 60 + Number(p[1] || 0) }
 function weekday(d) { return d.getDay() === 0 ? 7 : d.getDay() }
 
@@ -167,6 +207,15 @@ function sessionPlan(c, from, to, windows) {
   return plan
 }
 
+// An edit of the desks in force: launch the missing apps, move open bound apps to
+// their desks; nothing closes, windows of other apps stay where they are.
+function applyPlan(c, active, windows) {
+  var p = sessionPlan(c, active, active, windows)
+  var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces), byAddr = {}
+  windows.forEach(function(w) { byAddr[w.address] = w })
+  return { launch: p.launch, move: p.move.filter(function(m) { return byAddr[m.addr] && cls[byAddr[m.addr].class] !== undefined }) }
+}
+
 // ------------------------------------------------------------ the modal
 
 var NAME_MODES = ["number", "dynamic", "static"]
@@ -176,7 +225,7 @@ var ACTIONS = ["focus", "ask", "replace"]
 // The main page is the 3×3 tiles (mainMove).
 function rows(page, c) {
   if (page === "desk") return [{ type: "head" }, { type: "name" }, { type: "scheme" }, { type: "places" }]
-  if (page === "schedule") return [{ type: "head" }, { type: "days" }, { type: "from" }, { type: "to" }, { type: "deleteSession" }]
+  if (page === "schedule") return [{ type: "head" }, { type: "days" }, { type: "from" }, { type: "to" }, { type: "rename" }, { type: "deleteSession" }]
   var out = [{ type: "head" }]
   ;["foreignWindow", "collapse", "collapseInSession"].forEach(function(k) { out.push({ type: "choice", key: k }) })
   ;["sequentialLaunch", "schedule"].forEach(function(k) { out.push({ type: "switch", key: k }) })

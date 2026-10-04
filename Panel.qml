@@ -40,6 +40,7 @@ Item {
   property var draft: ({ days: [], from: "", to: "" })
   property string scheduleError: ""
   property string setHint: ""      // why the session can't be deleted
+  property string renameHint: ""   // why the new name doesn't fit
   property int dayCursor: 0        // the day under the cursor in the days row
   property var setPicker: null     // the header's set Dropdown
 
@@ -55,7 +56,7 @@ Item {
                                          free: tr("Only free"), all: tr("All"), off: tr("Don't collapse"),
                                          number: tr("Number"), dynamic: tr("By window"), static: tr("Custom"),
                                          focus: tr("Focus"), ask: tr("Ask"), replace: tr("Replace") })
-  readonly property var rowLabels: ({ places: tr("Apps by place"), deleteSession: tr("Delete session"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
+  readonly property var rowLabels: ({ places: tr("Apps by place"), deleteSession: tr("Delete session"), rename: tr("Rename session"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
                                       addRule: tr("One app window"), foreignWindow: tr("Foreign window on a laid-out desk"),
                                       collapse: tr("Collapsing without a session"), collapseInSession: tr("Collapsing in a session"),
                                       sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login") })
@@ -82,7 +83,7 @@ Item {
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     } else if (confirming && service && service.phase === "") service.cancelSwitch()
   }
-  onSetChanged: { loadDraft(); setHint = "" }
+  onSetChanged: { loadDraft(); setHint = ""; renameHint = "" }
   onPageChanged: flick.contentY = 0
   onSetsChanged: if (sets.indexOf(set) < 0) set = ""
   onRowsChanged: if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
@@ -110,18 +111,23 @@ Item {
 
   // ------------------------------------------------------------ editing: copy raw, change, save
 
-  function edit(fn) {
+  function edit(fn, then) {
     if (!root.service || root.service.loadError !== "") return   // broken config.json: no edits
     var next = JSON.parse(JSON.stringify(root.service.raw))
     fn(next)
-    root.service.save(next)
+    root.service.save(next, then)
   }
-  function editDesk(fn) {
+  // apply: a place changed — on the desks in force, launch/move at once.
+  function editDesk(fn, apply) {
     var ws = String(root.deskWs)
     root.edit(function(next) {
       var ds = root.set ? (next.sessions[root.set].workspaces = next.sessions[root.set].workspaces || {})
                         : (next.workspaces = next.workspaces || {})
       fn(ds[ws] = ds[ws] || { scheme: "single", slots: [], name: { mode: "number" } })
+    }, function(ok) {
+      // The desks in force changed: apply now (launch, move), after the reload.
+      var active = root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : ""
+      if (ok && apply && root.set === active) root.service.applyActive()
     })
   }
   function setOption(key, value) { root.edit(function(next) { next[key] = value }) }
@@ -135,7 +141,7 @@ Item {
     var app = root.apps.filter(function(a) { return a.value === id })[0]
     root.editDesk(function(d) {
       d.slots = Model.setSlot(d.slots, i, app ? { app: app.value, class: app.cls } : null, Model.PLACES[d.scheme] || 1)
-    })
+    }, true)
   }
   function addSession(name) {
     name = name.trim()
@@ -144,6 +150,15 @@ Item {
     if (!name || root.cfg.sessions[name]) return
     root.edit(function(next) { next.sessions = next.sessions || {}; next.sessions[name] = { workspaces: {} } })
     root.set = name
+  }
+  // Same order, schedule and desks; the active session keeps running under the new name.
+  function renameSet(to) {
+    var r = Model.renameSession(root.service.raw, root.set, to, root.tr("Regular"))
+    root.renameHint = r.error === "empty" ? root.tr("Type a name") : r.error === "regular" ? root.tr("This name is taken by the regular desks")
+      : r.error === "exists" ? root.tr("A session with this name exists") : ""
+    if (r.error) return false
+    if (to.trim() !== root.set && root.service.loadError === "") { root.service.save(r.raw); root.set = to.trim() }
+    return true
   }
   function deleteSession() {
     var name = root.set
@@ -241,7 +256,7 @@ Item {
     if (r.type === "head") root.back()
     else if (r.type === "deleteSession") root.askDelete()
     else if (r.type === "days") root.toggleDay(root.dayCursor + 1)
-    else if (["from", "to", "places", "addRule"].indexOf(r.type) >= 0) root.pressRow(i)
+    else if (["from", "to", "places", "addRule", "rename"].indexOf(r.type) >= 0) root.pressRow(i)
     else if (r.type === "name" && root.desk && root.desk.name.mode === "static") root.pressRow(i)
     else root.change(i, 1)
   }
@@ -270,7 +285,7 @@ Item {
     for (var i = 0; i < Model.PLACES[d ? d.scheme : "single"]; i++) {
       var s = d && d.slots[i]
       var a = s ? root.apps.filter(function(x) { return x.value === s.app || x.cls === s.class })[0] : null
-      out.push(!s ? "" : a ? a.label : s.class)
+      out.push(!s ? "" : a ? a.label : Model.appNameOf(s.class, DesktopEntries.applications.values))
     }
     return out
   }

@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
+  "; return { applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -97,11 +97,33 @@ assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "q", ws: 
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 10 }], 2, 9), [10, 11])
 assert.deepStrictEqual(M.fitSlots([{ class: "a" }, null, { class: "x" }], 2), [{ class: "a" }])
 assert.deepStrictEqual(M.fitSlots([null, { class: "b" }], 4), [null, { class: "b" }])
+// applying an edit of the desks in force
+const ap = M.normalize({ activeSession: "S", sessions: { S: { workspaces: {
+  "1": { scheme: "left-right", slots: [null, { app: "foot.desktop", class: "foot" }] }, "2": { slots: [{ app: "fx.desktop", class: "fx" }] } } } } })
+assert.deepStrictEqual(M.applyPlan(ap, "S", [{ address: "a", class: "fx", ws: 5 }, { address: "b", class: "x", ws: 1 }]),
+  { launch: [{ ws: "1", slot: 2, app: "foot.desktop", class: "foot" }], move: [{ addr: "a", ws: 2 }] }, "no stranger moves, no close")
+assert.deepStrictEqual(M.applyPlan(M.normalize({ workspaces: { "3": { slots: [{ app: "f", class: "f" }] } } }), "", []).launch, [{ ws: "3", slot: 1, app: "f", class: "f" }])
+// app names
+assert.strictEqual(M.prettyClass("org.omarchy.agent"), "Agent"); assert.strictEqual(M.prettyClass("chrome-www.youtube.com__-Default"), "Youtube")
+assert.strictEqual(M.prettyClass("foot"), "Foot")
+const ents = [{ id: "org.gnome.Nautilus.desktop", name: "Files", startupClass: "" }, { id: "firefox.desktop", name: "Firefox", startupClass: "firefox" },
+  { id: "omarchy-agent.desktop", name: "Agent App", startupClass: "Agent" }]
+assert.strictEqual(M.appNameOf("Firefox", ents), "Firefox"); assert.strictEqual(M.appNameOf("org.gnome.nautilus", ents), "Files")
+assert.strictEqual(M.appNameOf("org.omarchy.agent", ents), "Agent App"); assert.strictEqual(M.appNameOf("org.x.zzz", ents), "Zzz")
+assert.strictEqual(M.appNameOf("chrome-mail.google.com__-Default", ents), "Mail")
+// rename a session
+const rr = { activeSession: "B", sessions: { A: { schedule: null }, B: { workspaces: { "1": {} }, schedule: { days: [1] } }, C: {} } }
+const rn = M.renameSession(rr, "B", " Work ", "Обычные")
+assert.deepStrictEqual(Object.keys(rn.raw.sessions), ["A", "Work", "C"]); assert.strictEqual(rn.raw.activeSession, "Work")
+assert.deepStrictEqual(rn.raw.sessions.Work, rr.sessions.B); assert.strictEqual(rr.activeSession, "B", "input untouched")
+assert.strictEqual(M.renameSession(rr, "A", "Z", "Обычные").raw.activeSession, "B")
+assert.strictEqual(M.renameSession(rr, "A", "  ", "Обычные").error, "empty"); assert.strictEqual(M.renameSession(rr, "A", "обычные", "Обычные").error, "regular")
+assert.strictEqual(M.renameSession(rr, "A", "C", "Обычные").error, "exists"); assert.strictEqual(M.renameSession(rr, "X", "Y", "").error, "missing")
 // modal pages
 const rc = M.normalize({ singleInstance: [{ class: "a" }] })
 assert.deepStrictEqual(M.rows("settings", rc).map(x => x.type), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])
 assert.deepStrictEqual(M.rows("desk", rc).map(x => x.type), ["head", "name", "scheme", "places"])
-assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to", "deleteSession"])
+assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to", "rename", "deleteSession"])
 // main page cursor
 assert.strictEqual(M.mainMove(4, 1, 0, true), 5); assert.strictEqual(M.mainMove(5, 1, 0, true), 5)
 assert.strictEqual(M.mainMove(1, 0, 1, false), 4); assert.strictEqual(M.mainMove(7, 0, 1, false), 7)

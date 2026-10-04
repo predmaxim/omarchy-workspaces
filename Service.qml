@@ -195,6 +195,20 @@ Item {
     if (!ok) { root.phase = ""; root.plan = null }
   }
 
+  // The desks in force were edited: launch missing apps, move open bound ones (no closing).
+  // Call after the save and reload, so the new rules place the windows.
+  function applyActive() {
+    if (root.phase !== "") return
+    var p = Model.applyPlan(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow())
+    p.move.forEach(function(m) {
+      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+    })
+    if (!p.launch.length) return
+    root.phase = "launching"
+    root.launchQueue = p.launch
+    root.launchNext()
+  }
+
   function launchNext() {
     if (root.launchQueue.length === 0) { root.phase = ""; root.plan = null; return }
     if (!root.cfg.sequentialLaunch) {
