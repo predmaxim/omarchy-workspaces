@@ -247,7 +247,9 @@ function swapDesks(raw, set, a, b) {
 function swapMoves(c, active, windows, a, b) {
   var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces)
   return windows.filter(function(w) {
-    return (String(w.ws) === String(a) || String(w.ws) === String(b)) && cls[w.class] !== undefined && cls[w.class] !== String(w.ws)
+    var to = cls[w.class]
+    // Only between the two swapped desks: a window bound to a third desk stays put.
+    return (String(w.ws) === String(a) || String(w.ws) === String(b)) && (to === String(a) || to === String(b)) && to !== String(w.ws)
   }).map(function(w) { return { addr: w.address, ws: Number(cls[w.class]) } })
 }
 

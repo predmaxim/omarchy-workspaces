@@ -168,4 +168,9 @@ assert.deepStrictEqual(M.swapDesks(sw, "S", 4, 1).workspaces, sw.workspaces)
 const swc = M.normalize({ workspaces: { "1": { slots: [{ class: "b" }] }, "2": { slots: [{ class: "a" }] } } })
 assert.deepStrictEqual(M.swapMoves(swc, "", [{ address: "1", ws: 1, class: "a" }, { address: "2", ws: 2, class: "b" },
   { address: "3", ws: 1, class: "z" }, { address: "4", ws: 3, class: "a" }], 1, 2), [{ addr: "1", ws: 2 }, { addr: "2", ws: 1 }])
+// a window on a swapped desk bound to a third desk stays; one desk empty; a session set
+const swd = M.normalize({ workspaces: { "5": { slots: [{ class: "a" }] }, "7": { slots: [{ class: "c" }] } },
+  sessions: { S: { workspaces: { "2": { slots: [{ class: "s" }] } } } } })
+assert.deepStrictEqual(M.swapMoves(swd, "", [{ address: "1", ws: 1, class: "a" }, { address: "2", ws: 1, class: "c" }], 1, 5), [{ addr: "1", ws: 5 }])
+assert.deepStrictEqual(M.swapMoves(swd, "S", [{ address: "3", ws: 4, class: "s" }, { address: "4", ws: 4, class: "a" }], 2, 4), [{ addr: "3", ws: 2 }])
 console.log("ok")
