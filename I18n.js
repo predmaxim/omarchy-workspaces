@@ -6,6 +6,7 @@ var TABLES = {
   ru: {
     "Workspaces": "Рабочие столы",
     "config.json is broken — session %1 not started": "config.json сломан — сессия «%1» не запущена",
+    "config.json is broken — the scheduled session was not checked": "config.json сломан — сессия по расписанию не проверялась",
     "config.json is broken, edits are off: %1": "config.json сломан, правка отключена: %1",
     "Not closed: %1": "Не закрыто: %1",
     "No session": "Без сессии",

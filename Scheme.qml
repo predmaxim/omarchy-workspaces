@@ -1,4 +1,5 @@
 import QtQuick
+import QtQuick.Shapes
 import qs.Commons
 import "Model.js" as Model
 
@@ -31,8 +32,27 @@ Item {
       height: modelData.h * root.height - root.gap
       radius: Style.space(3)
       color: filled ? Util.alpha(root.foreground, 0.16) : "transparent"
-      border.width: root.cursor === index ? Math.max(2, Style.space(2)) : filled ? 0 : 1
-      border.color: root.cursor === index ? root.foreground : Util.alpha(root.foreground, 0.35)
+      border.width: root.cursor === index ? Math.max(2, Style.space(2)) : 0
+      border.color: root.foreground
+
+      // Empty place: dashed outline.
+      Shape {
+        id: dash
+        anchors.fill: parent
+        visible: !parent.filled && root.cursor !== parent.index
+        ShapePath {
+          strokeColor: Util.alpha(root.foreground, 0.45)
+          strokeWidth: 1
+          strokeStyle: ShapePath.DashLine
+          dashPattern: [4, 3]
+          fillColor: "transparent"
+          startX: 0.5; startY: 0.5
+          PathLine { x: dash.width - 0.5; y: 0.5 }
+          PathLine { x: dash.width - 0.5; y: dash.height - 0.5 }
+          PathLine { x: 0.5; y: dash.height - 0.5 }
+          PathLine { x: 0.5; y: 0.5 }
+        }
+      }
 
       Column {
         anchors.centerIn: parent

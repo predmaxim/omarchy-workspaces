@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
+  "; return { fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -95,6 +95,8 @@ for (const k of Object.keys(I.TABLES.ru)) assert.ok(used.has(k), "unused transla
 const fd = M.normalize({ sessions: { A: { workspaces: { "9": { slots: [{ app: "x", class: "x" }] } } } } })
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "q", ws: 11 }], 3, 9), [10, 12, 13])
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 10 }], 2, 9), [10, 11])
+assert.deepStrictEqual(M.fitSlots([{ class: "a" }, null, { class: "x" }], 2), [{ class: "a" }])
+assert.deepStrictEqual(M.fitSlots([null, { class: "b" }], 4), [null, { class: "b" }])
 // modal pages
 const rc = M.normalize({ singleInstance: [{ class: "a" }] })
 assert.deepStrictEqual(M.rows("settings", rc).map(x => x.type), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])

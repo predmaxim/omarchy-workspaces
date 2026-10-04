@@ -35,6 +35,13 @@ function setSlot(slots, i, slot, places) {
   return out
 }
 
+// Raw slots cut to `places`, no trailing nulls.
+function fitSlots(slots, places) {
+  var out = (Array.isArray(slots) ? slots : []).slice(0, places)
+  while (out.length && !out[out.length - 1]) out.pop()
+  return out
+}
+
 function hasSlots(desk) { return !!desk && desk.slots.some(function(s) { return s }) }
 
 function normalize(raw) {

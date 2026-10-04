@@ -125,7 +125,7 @@ Item {
     })
   }
   function setOption(key, value) { root.edit(function(next) { next[key] = value }) }
-  function setScheme(v) { root.editDesk(function(d) { d.scheme = v; d.slots = Model.setSlot(d.slots, 0, (d.slots || [])[0] || null, Model.PLACES[v]) }) }
+  function setScheme(v) { root.editDesk(function(d) { d.scheme = v; d.slots = Model.fitSlots(d.slots, Model.PLACES[v]) }) }
   function setNameMode(v) {
     root.editDesk(function(d) { d.name = v === "static" ? { mode: v, text: d.name && d.name.text || "" } : { mode: v } })
   }
@@ -150,6 +150,7 @@ Item {
     root.edit(function(next) { delete next.sessions[name]; if (next.activeSession === name) next.activeSession = "" })
     root.set = ""
     root.showPage("main")
+    root.pos = "head0"
   }
   function addRule(cls) {
     cls = cls.trim()
@@ -397,6 +398,7 @@ Item {
                   font.family: root.font
                   font.pixelSize: Style.font.body
                   onVisibleChanged: if (visible) forceActiveFocus()
+                  onActiveFocusChanged: if (!activeFocus) root.adding = false
                   onAccepted: { root.addSession(text); text = "" }
                   Connections { target: root; function onFocusNameField() { nameField.forceActiveFocus() } }
                 }

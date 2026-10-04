@@ -42,7 +42,15 @@ Item {
           var name = Model.scheduleAt(root.cfg, new Date())
           if (name && name !== root.cfg.activeSession) root.requestSession(name)
         }
-      } catch (e) { root.loadError = String(e) }   // keep the last good one
+      } catch (e) {
+        root.loadError = String(e)   // keep the last good one
+        // Broken at login: the schedule is checked only now, so say it was skipped.
+        if (!root.scheduleChecked) {
+          root.scheduleChecked = true
+          Quickshell.execDetached(["omarchy-notification-send", "-u", "normal", root.tr("Workspaces"),
+                                   root.tr("config.json is broken — the scheduled session was not checked")])
+        }
+      }
     }
   }
 
