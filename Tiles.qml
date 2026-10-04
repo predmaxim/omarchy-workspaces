@@ -11,6 +11,9 @@ Column {
   id: root
   property var panel: null
   spacing: Style.spacing.xs
+  // Ctrl+drag of a tile onto another swaps the desks: the dragged tile and the target, -1 — none.
+  property int dragFrom: -1
+  property int dragTo: -1
 
   CursorSurface {
     visible: root.panel.set !== ""
@@ -51,15 +54,28 @@ Column {
         implicitHeight: Style.space(110)
         foreground: root.panel.fg
         bordered: true
-        hasCursor: root.panel.pos === index
+        hasCursor: root.panel.pos === index || root.dragFrom === index || root.dragTo === index
         opacity: free ? 0.55 : 1
 
         MouseArea {
           id: area
           anchors.fill: parent
           hoverEnabled: true
-          onPositionChanged: function(mouse) { if (root.panel.gate.moved(area, mouse)) root.panel.pos = tile.index }
-          onClicked: { root.panel.pos = tile.index; root.panel.activate() }
+          onPressed: function(mouse) { root.dragFrom = mouse.modifiers & Qt.ControlModifier ? tile.index : -1; root.dragTo = -1 }
+          onPositionChanged: function(mouse) {
+            if (root.dragFrom >= 0) {
+              var p = area.mapToItem(grid, mouse.x, mouse.y), t = grid.childAt(p.x, p.y)
+              root.dragTo = t && t.ws !== undefined && t.index !== tile.index ? t.index : -1
+            } else if (root.panel.gate.moved(area, mouse)) root.panel.pos = tile.index
+          }
+          property bool dragged: false   // this press was a Ctrl+drag: no click
+          onReleased: {
+            area.dragged = root.dragFrom >= 0
+            if (area.dragged && root.dragTo >= 0) { root.panel.swapDesks(root.dragFrom + 1, root.dragTo + 1); root.panel.pos = root.dragTo }
+            root.dragFrom = -1; root.dragTo = -1
+          }
+          onCanceled: { root.dragFrom = -1; root.dragTo = -1 }
+          onClicked: if (!area.dragged) { root.panel.pos = tile.index; root.panel.activate() }
         }
 
         Column {

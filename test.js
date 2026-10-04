@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -156,4 +156,16 @@ assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "22:00", to: "02:
 assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "11:00", to: "13:00" }), "overlap:A")
 assert.strictEqual(M.scheduleError(ss, "B", { days: [2], from: "11:00", to: "13:00" }), "")
 assert.strictEqual(M.scheduleError(ss, "A", { days: [1], from: "08:00", to: "10:00" }), "")
+// swapping desks
+const sw = { workspaces: { "1": { scheme: "grid" }, "2": { name: { mode: "dynamic" } } }, sessions: { S: { workspaces: { "4": { slots: [{ class: "x" }] } } } } }
+const sw1 = M.swapDesks(sw, "", 1, 2)
+assert.deepStrictEqual(sw1.workspaces, { "1": { name: { mode: "dynamic" } }, "2": { scheme: "grid" } })
+assert.deepStrictEqual(sw.workspaces["1"], { scheme: "grid" })   // the input is untouched
+assert.deepStrictEqual(M.swapDesks(sw, "", 1, 5).workspaces, { "2": { name: { mode: "dynamic" } }, "5": { scheme: "grid" } })
+assert.deepStrictEqual(M.swapDesks(sw, "", 7, 8).workspaces, sw.workspaces)
+assert.deepStrictEqual(M.swapDesks(sw, "S", 4, 1).sessions.S.workspaces, { "1": { slots: [{ class: "x" }] } })
+assert.deepStrictEqual(M.swapDesks(sw, "S", 4, 1).workspaces, sw.workspaces)
+const swc = M.normalize({ workspaces: { "1": { slots: [{ class: "b" }] }, "2": { slots: [{ class: "a" }] } } })
+assert.deepStrictEqual(M.swapMoves(swc, "", [{ address: "1", ws: 1, class: "a" }, { address: "2", ws: 2, class: "b" },
+  { address: "3", ws: 1, class: "z" }, { address: "4", ws: 3, class: "a" }], 1, 2), [{ addr: "1", ws: 2 }, { addr: "2", ws: 1 }])
 console.log("ok")

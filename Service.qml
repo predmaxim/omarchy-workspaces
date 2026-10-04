@@ -213,6 +213,15 @@ Item {
     root.launchNext()
   }
 
+  // Desks a and b of the set in force were swapped: their bound windows follow
+  // to the new desks; unbound ones stay, nothing launches or closes. Call after the reload.
+  function moveSwapped(a, b) {
+    if (root.busy() || root.loadError !== "") return
+    Model.swapMoves(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow(), a, b).forEach(function(m) {
+      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+    })
+  }
+
   // A switch is running, being planned or waits for confirmation: launching now
   // would start apps the switch is about to close.
   function busy() { return root.phase !== "" || planTimer.running || root.pendingPlan !== null }

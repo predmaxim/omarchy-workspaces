@@ -131,6 +131,15 @@ Item {
       if (ok && apply && root.set === active) root.service.applyActive(deskWs, apply)
     })
   }
+  // Desks a and b (1–9) of the edited set trade places; in the set in force their
+  // bound windows follow after the reload.
+  function swapDesks(a, b) {
+    if (a === b || !root.service || root.service.loadError !== "") return
+    var set = root.set
+    root.service.save(Model.swapDesks(root.service.raw, set, a, b), function(ok) {
+      if (ok && set === root.activeSet) root.service.moveSwapped(a, b)
+    })
+  }
   function setOption(key, value) { root.edit(function(next) { next[key] = value }) }
   function setScheme(v) { root.editDesk(function(d) { d.scheme = v; d.slots = Model.fitSlots(d.slots, Model.PLACES[v]) }) }
   function setNameMode(v) {
@@ -374,6 +383,23 @@ Item {
           onActivateRequested: root.activate()
           onCloseRequested: root.back()
           onDeleteRequested: root.remove()
+
+          // Ctrl+arrows on the tiles: swap the desk with its neighbour (the catcher
+          // ignores modifiers, so this goes first).
+          Keys.forwardTo: [swapKeys]
+          Item {
+            id: swapKeys
+            Keys.onPressed: function(event) {
+              var d = { [Qt.Key_Left]: [-1, 0], [Qt.Key_Right]: [1, 0], [Qt.Key_Up]: [0, -1], [Qt.Key_Down]: [0, 1] }[event.key]
+              if (!d || !(event.modifiers & Qt.ControlModifier) || keyCatcher.blocked || root.confirming
+                  || root.page !== "main" || typeof root.pos !== "number") return
+              event.accepted = true
+              var col = root.pos % 3 + d[0], row = Math.floor(root.pos / 3) + d[1]
+              if (col < 0 || col > 2 || row < 0 || row > 2) return
+              root.swapDesks(root.pos + 1, row * 3 + col + 1)
+              root.pos = row * 3 + col
+            }
+          }
 
           PointerMoveGate { id: pointerGate; referenceItem: list }
 

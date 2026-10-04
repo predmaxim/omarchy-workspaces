@@ -230,6 +230,27 @@ function launchPlan(c, active, windows) {
   return { launch: p.launch, move: p.move.filter(function(m) { return byAddr[m.addr] && cls[byAddr[m.addr].class] !== undefined }) }
 }
 
+// Desks a and b of a set ("" — regular) trade places: name, scheme, slots; the numbers
+// stay. A deep copy of raw; an absent desk stays absent on the other number.
+function swapDesks(raw, set, a, b) {
+  var next = JSON.parse(JSON.stringify(raw || {}))
+  var holder = set ? (next.sessions = next.sessions || {}, next.sessions[set] = next.sessions[set] || {}) : next
+  var ds = holder.workspaces = holder.workspaces || {}, da = ds[String(a)], db = ds[String(b)]
+  delete ds[String(a)]; delete ds[String(b)]
+  if (db !== undefined) ds[String(a)] = db
+  if (da !== undefined) ds[String(b)] = da
+  return next
+}
+
+// After a swap of desks a and b in the set in force (c — the new config): open windows
+// on those desks whose class is bound go to their desk; unbound ones stay.
+function swapMoves(c, active, windows, a, b) {
+  var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces)
+  return windows.filter(function(w) {
+    return (String(w.ws) === String(a) || String(w.ws) === String(b)) && cls[w.class] !== undefined && cls[w.class] !== String(w.ws)
+  }).map(function(w) { return { addr: w.address, ws: Number(cls[w.class]) } })
+}
+
 // ------------------------------------------------------------ the modal
 
 var NAME_MODES = ["number", "dynamic", "static"]
