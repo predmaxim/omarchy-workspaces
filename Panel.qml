@@ -59,7 +59,8 @@ Item {
   readonly property var rowLabels: ({ places: tr("Apps by place"), deleteSession: tr("Delete session"), rename: tr("Rename session"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
                                       addRule: tr("One app window"), foreignWindow: tr("Foreign window on a laid-out desk"),
                                       collapse: tr("Collapsing without a session"), collapseInSession: tr("Collapsing in a session"),
-                                      sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login") })
+                                      sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login"),
+                                      hideNoSession: tr("Hide the name without a session") })
   readonly property var schemeNames: ({ single: tr("One window"), "left-right": tr("Left and right"), "top-bottom": tr("Top and bottom"),
                                         "main-left": tr("Main on the left"), grid: tr("Grid") })
   readonly property var days: [tr("Mon"), tr("Tue"), tr("Wed"), tr("Thu"), tr("Fri"), tr("Sat"), tr("Sun")]
@@ -99,10 +100,12 @@ Item {
     function onPendingPlanChanged() { root.sync() }
     function onPhaseChanged() { root.sync() }
   }
-  // The service asks (windows to close) → the confirmation page; it's done → close.
+  // The service asks (windows to close) → the confirmation page; closing → hide it, so the
+  // apps' "save?" dialogs get the keyboard (the modal holds it exclusively); it's done → close.
   function sync() {
     var s = root.service
-    if (s.pendingPlan && s.pendingPlan.close.length && !root.confirming) {
+    if (s.phase === "closing") root.host.close()
+    else if (s.pendingPlan && s.pendingPlan.close.length && !root.confirming) {
       root.switchTo = s.pendingPlan.to; root.confirming = true; root.host.open()
     } else if (root.confirming && !s.pendingPlan && s.phase === "") {
       root.confirming = false; root.host.close()

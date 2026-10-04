@@ -128,7 +128,7 @@ assert.strictEqual(M.renameSession(rr, "A", "  ", "Обычные").error, "empt
 assert.strictEqual(M.renameSession(rr, "A", "C", "Обычные").error, "exists"); assert.strictEqual(M.renameSession(rr, "X", "Y", "").error, "missing")
 // modal pages
 const rc = M.normalize({ singleInstance: [{ class: "a" }] })
-assert.deepStrictEqual(M.rows("settings", rc).map(x => x.type), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])
+assert.deepStrictEqual(M.rows("settings", rc).map(x => x.type), ["head", "choice", "choice", "choice", "switch", "switch", "switch", "rule", "addRule"])
 assert.deepStrictEqual(M.rows("desk", rc).map(x => x.type), ["head", "name", "scheme", "places"])
 assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to", "rename", "deleteSession"])
 // main page cursor

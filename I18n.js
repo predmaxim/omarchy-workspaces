@@ -44,7 +44,7 @@ var TABLES = {
     "Foreign window on a laid-out desk": "Чужое окно на столе со схемой",
     "Fri": "Пт",
     "Grid": "Сетка",
-    "Launch one by one": "Запускать по очереди",
+    "Launch one by one": "Запускать по очереди", "Hide the name without a session": "Скрывать название без сессии",
     "Launching…": "Запускаем…",
     "Left and right": "Слева и справа",
     "Main on the left": "Главное слева",

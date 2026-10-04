@@ -97,9 +97,9 @@ Panel {
 
     WidgetButton {
       id: sessionButton
-      visible: root.session !== ""
+      visible: root.session !== "" || !root.cfg.hideNoSession
       bar: root.bar
-      text: root.session + " ▾"
+      text: (root.session || root.tr("No session")) + " ▾"
       horizontalMargin: 6
       verticalPadding: 6
       fixedHeight: root.barSize

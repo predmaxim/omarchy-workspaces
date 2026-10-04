@@ -154,17 +154,24 @@ Item {
     root.stuck = []
     root.plan.close.forEach(function(a) { root.dispatch('hl.dsp.window.close({ window = "address:' + a + '" })') })
     closeWait.elapsed = 0
+    closeWait.focused = ""
     closeWait.start()
   }
   Timer {
     id: closeWait
     property int elapsed: 0
+    property string focused: ""
     interval: 200; repeat: true
     onTriggered: {
       elapsed += interval
       var up = root.windowsNow().map(function(w) { return w.address })
       var left = root.plan.close.filter(function(a) { return up.indexOf(a) >= 0 })
-      if (left.length === 0 || elapsed >= 30000) { stop(); root.stuck = left; root.finishSwitch() }
+      if (left.length === 0 || elapsed >= 30000) { stop(); root.stuck = left; root.finishSwitch(); return }
+      // A window still open after a second is asking something ("save?"): show it, one at a time.
+      if (elapsed >= 1000 && left[0] !== focused) {
+        focused = left[0]
+        root.dispatch('hl.dsp.focus({ window = "address:' + focused + '" })')
+      }
     }
   }
 
@@ -277,6 +284,7 @@ Item {
     id: launchWait
     property string cls: ""
     property int elapsed: 0
+    property string focused: ""
     interval: 200; repeat: true
     onTriggered: {
       elapsed += interval

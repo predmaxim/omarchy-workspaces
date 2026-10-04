@@ -5,7 +5,7 @@
 var PLACES = { single: 1, "left-right": 2, "top-bottom": 2, "main-left": 3, grid: 4 }
 var SCHEMES = ["single", "left-right", "top-bottom", "main-left", "grid"]
 var CHOICES = { foreignWindow: ["tile", "float", "next"], collapse: ["free", "all", "off"], collapseInSession: ["free", "all", "off"] }
-var DEFAULTS = { foreignWindow: "tile", collapse: "free", collapseInSession: "free", sequentialLaunch: false, schedule: true }
+var DEFAULTS = { foreignWindow: "tile", collapse: "free", collapseInSession: "free", sequentialLaunch: false, schedule: true, hideNoSession: true }
 
 function desks(t) {
   var out = {}
@@ -265,7 +265,7 @@ function rows(page, c) {
   if (page === "schedule") return [{ type: "head" }, { type: "days" }, { type: "from" }, { type: "to" }, { type: "rename" }, { type: "deleteSession" }]
   var out = [{ type: "head" }]
   ;["foreignWindow", "collapse", "collapseInSession"].forEach(function(k) { out.push({ type: "choice", key: k }) })
-  ;["sequentialLaunch", "schedule"].forEach(function(k) { out.push({ type: "switch", key: k }) })
+  ;["sequentialLaunch", "schedule", "hideNoSession"].forEach(function(k) { out.push({ type: "switch", key: k }) })
   c.singleInstance.forEach(function(r, i) { out.push({ type: "rule", index: i }) })
   out.push({ type: "addRule" })
   return out
