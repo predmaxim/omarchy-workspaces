@@ -47,20 +47,33 @@ Item {
   }
 
   // Writes config.json and reloads Hyprland; refuses over a broken file (the user fixes it by hand).
-  // then(ok) runs after the write and the reload.
+  // then(ok) runs after the write and the reload. A save while one is running waits:
+  // only the latest payload is written, every waiting then() runs after it.
   function save(next, then) {
     if (root.loadError !== "") return false
     root.raw = next
-    saveProc.then = then || null
-    saveProc.command = ["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1.$$" && mv "$1.$$" "$1" && hyprctl reload >/dev/null',
-                        "sh", root.path, JSON.stringify(next, null, 2)]
-    saveProc.running = true
+    saveProc.queued = (saveProc.queued || []).concat(then ? [then] : [])
+    saveProc.payload = next
+    if (!saveProc.running) saveProc.start()
     return true
   }
   Process {
     id: saveProc
-    property var then: null
-    onExited: function(code) { var t = then; then = null; if (t) t(code === 0) }
+    property var payload: null   // the next file to write, null — nothing waits
+    property var queued: []      // its then()s
+    property var thens: []       // the running write's then()s
+    function start() {
+      thens = queued; queued = []
+      command = ["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1.$$" && mv "$1.$$" "$1" && hyprctl reload >/dev/null',
+                 "sh", root.path, JSON.stringify(payload, null, 2)]
+      payload = null
+      running = true
+    }
+    onExited: function(code) {
+      var t = thens; thens = []
+      if (payload !== null) start()
+      t.forEach(function(f) { f(code === 0) })
+    }
   }
 
   function windowsNow() {
@@ -101,7 +114,12 @@ Item {
   }
   function confirmSwitch() {
     if (!root.pendingPlan || root.phase !== "") return
-    if (root.loadError !== "") { root.cancelSwitch(); return }   // can't record the session over a broken file
+    // Can't record the session over a broken file: say so (a scheduled switch has no modal).
+    if (root.loadError !== "") {
+      Quickshell.execDetached(["omarchy-notification-send", "-u", "normal", root.tr("Workspaces"),
+                               root.tr("config.json is broken — session %1 not started", root.pendingPlan.to || root.tr("No session"))])
+      root.cancelSwitch(); return
+    }
     root.phase = "udisks"
     udisksProc.running = true
   }
