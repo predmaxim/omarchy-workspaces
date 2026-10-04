@@ -1,5 +1,6 @@
 -- hypr/prefix.lua — makes require("predmaxim_workspaces.<name>") load <dir>/<name>.lua and
--- drops the cached copies, so a `hyprctl reload` (Lua state survives it) re-reads the files.
+-- drops cached copies. Hyprland starts a fresh Lua state on every `hyprctl reload`, so the
+-- cleanup only matters when the file runs twice in one state (the tests).
 -- Usage: dofile(<dir>/prefix.lua)(<dir>)
 return function(dir)
   for i = #package.searchers, 1, -1 do

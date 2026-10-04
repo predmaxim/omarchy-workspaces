@@ -55,11 +55,9 @@ local function place_master(ws, d)
   end
 end
 
-if predmaxim_workspaces then
-  for _, sub in ipairs(predmaxim_workspaces.subs or {}) do sub:remove() end
-end
-local subs = {}
-local function on(ev, fn) subs[#subs + 1] = hl.on(ev, fn) end
+-- `hyprctl reload` starts a fresh Lua state (checked: globals and old hl.on handlers
+-- are gone), so there is nothing to unsubscribe here.
+local function on(ev, fn) hl.on(ev, fn) end
 
 on("window.open", function(w)
   if not w or not w.workspace or w.floating then return end
@@ -101,6 +99,6 @@ on("workspace.removed", schedule)
 on("window.open", schedule)
 on("window.move_to_workspace", schedule)
 
-subs[#subs + 1] = single.setup(function() return cfg.singleInstance end)
+single.setup(function() return cfg.singleInstance end)
 
-predmaxim_workspaces = { subs = subs, reload = function() hl.exec_cmd("hyprctl reload") end }
+predmaxim_workspaces = { reload = function() hl.exec_cmd("hyprctl reload") end }
