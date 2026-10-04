@@ -197,7 +197,7 @@ Item {
     root.cursor = Math.max(0, Math.min(root.rows.length - 1, root.cursor + dy))
     pointerGate.reset()
   }
-  function showPage(p) { root.page = p; root.cursor = 1; root.place = 0 }
+  function showPage(p) { root.adding = false; root.page = p; root.cursor = 1; root.place = 0 }
   function openDesk(ws) { root.deskWs = ws; root.showPage("desk") }
   function back() {
     if (root.confirming) { if (root.service.phase === "launching") root.host.close(); else root.service.cancelSwitch() }
@@ -385,7 +385,8 @@ Item {
                   fontFamily: root.font
                   hasCursor: root.pos === "head0"
                   onChanged: function(v) { root.pickSet(v); value = Qt.binding(function() { return root.set }) }
-                  onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { root.focusKeys() })
+                  // After "+ New session" the name field keeps the keys.
+                  onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { if (root.adding) root.focusNameField(); else root.focusKeys() })
                   Component.onCompleted: root.setPicker = setDropdown
                 }
                 TextField {
@@ -398,7 +399,6 @@ Item {
                   font.family: root.font
                   font.pixelSize: Style.font.body
                   onVisibleChanged: if (visible) forceActiveFocus()
-                  onActiveFocusChanged: if (!activeFocus) root.adding = false
                   onAccepted: { root.addSession(text); text = "" }
                   Connections { target: root; function onFocusNameField() { nameField.forceActiveFocus() } }
                 }
