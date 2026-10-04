@@ -15,7 +15,7 @@ assert(act["2"] and act["2"].slots[1].class == "b" and act["1"] == nil, "session
 c.activeSession = "Нет такой"
 assert(config.active(c)["1"], "missing session -> plain desks")
 local s = config.parse('{"workspaces":{"1":{"scheme":"single","slots":[{"class":"a"},{"class":"b"}]}}}')
-assert(#s.workspaces["1"].slots == 1, "slots cut to the scheme's places")
+assert(s.workspaces["1"].slots[1].class == "a" and s.workspaces["1"].slots[2] == nil, "slots cut to the scheme's places")
 local bad, err = config.parse("{")
 assert(bad == nil and err)
 local ended = config.parse('{"activeSession":"","collapse":"all","collapseInSession":"off"}')

@@ -13,17 +13,29 @@ function desks(t) {
     var d = t[ws]
     if (typeof d !== "object" || d === null || isNaN(Number(ws))) return
     var scheme = PLACES[d.scheme] ? d.scheme : "single"
+    // Places keep their numbers: an empty place is null (trailing ones dropped).
     var slots = [], slotArr = Array.isArray(d.slots) ? d.slots : []
     for (var i = 0; i < slotArr.length && i < PLACES[scheme]; i++) {
       var s = slotArr[i]
-      if (typeof s === "object" && s !== null && typeof s.class === "string" && s.class !== "") {
-        slots.push({ app: s.app, class: s.class })
-      }
+      slots.push(typeof s === "object" && s !== null && typeof s.class === "string" && s.class !== "" ? { app: s.app, class: s.class } : null)
     }
+    while (slots.length && !slots[slots.length - 1]) slots.pop()
     out[ws] = { scheme: scheme, slots: slots, name: typeof d.name === "object" && d.name !== null ? d.name : { mode: "number" } }
   })
   return out
 }
+
+// Raw slots with place i (0-based) set to `slot` (null clears it), cut to `places`,
+// holes as null, no trailing nulls.
+function setSlot(slots, i, slot, places) {
+  var out = (Array.isArray(slots) ? slots : []).slice(0, places)
+  while (out.length < i) out.push(null)
+  if (i < places) out[i] = slot
+  while (out.length && !out[out.length - 1]) out.pop()
+  return out
+}
+
+function hasSlots(desk) { return !!desk && desk.slots.some(function(s) { return s }) }
 
 function normalize(raw) {
   var r = raw && typeof raw === "object" ? raw : {}, c = {}
@@ -86,7 +98,7 @@ function overlaps(sessions) {
 
 function classesOf(ds) {
   var out = Object.create(null)
-  Object.keys(ds).forEach(function(ws) { ds[ws].slots.forEach(function(s) { out[s.class] = ws }) })
+  Object.keys(ds).forEach(function(ws) { ds[ws].slots.forEach(function(s) { if (s) out[s.class] = ws }) })
   return out
 }
 
@@ -142,7 +154,7 @@ function sessionPlan(c, from, to, windows) {
   })
   Object.keys(next).sort(function(a, b) { return a - b }).forEach(function(ws) {
     next[ws].slots.forEach(function(s, i) {
-      if (!open[s.class]) plan.launch.push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
+      if (s && !open[s.class]) plan.launch.push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
     })
   })
   return plan

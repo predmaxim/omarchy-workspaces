@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, setCol }")()
+  "; return { setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, setCol }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -47,9 +47,16 @@ assert.deepStrictEqual(Object.keys(M.activeDesks(M.normalize({ activeSession: "Ð
 const badDesks = M.normalize({ workspaces: { "foo": { slots: [] }, "1": { slots: [] } } })
 assert.ok("1" in badDesks.workspaces && !("foo" in badDesks.workspaces), "non-numeric key ignored")
 
-// Slots: bad slot filtered out, valid slots kept up to limit
-const badSlots = M.normalize({ workspaces: { "1": { scheme: "left-right", slots: [null, { class: "valid" }] } } })
-assert.deepStrictEqual(badSlots.workspaces["1"].slots, [{ app: undefined, class: "valid" }])
+// Slots keep their places: [null, A] on left-right â†’ A is place 2; trailing holes dropped
+const badSlots = M.normalize({ workspaces: { "1": { scheme: "left-right", slots: [null, { app: "a.desktop", class: "a" }] }, "2": { slots: [{ class: "" }] } } })
+assert.deepStrictEqual(badSlots.workspaces["1"].slots, [null, { app: "a.desktop", class: "a" }])
+assert.deepStrictEqual(badSlots.workspaces["2"].slots, [])
+assert.ok(M.hasSlots(badSlots.workspaces["1"]) && !M.hasSlots(badSlots.workspaces["2"]))
+assert.deepStrictEqual(M.sessionPlan(M.normalize({ sessions: { S: { workspaces: badSlots.workspaces } } }), "", "S", []).launch,
+  [{ ws: "1", slot: 2, app: "a.desktop", class: "a" }], "launch keeps place 2")
+assert.deepStrictEqual(M.setSlot([], 2, { class: "x" }, 4), [null, null, { class: "x" }])
+assert.deepStrictEqual(M.setSlot([null, null, { class: "x" }], 2, null, 4), [])
+assert.deepStrictEqual(M.setSlot([{ class: "a" }, null, { class: "x" }], 0, null, 2), [], "cut to the new scheme")
 
 // Name: keep object as-is, else { mode: "number" }
 const nameTests = M.normalize({ workspaces: { "1": { name: { text: "x" } }, "2": { name: "string" }, "3": {} } })

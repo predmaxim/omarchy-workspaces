@@ -15,7 +15,7 @@ local desks = config.active(cfg)
 local function fixed_of(c)
   local out = {}
   for ws, d in pairs(config.active(c)) do
-    if #d.slots > 0 or (d.name and d.name.mode == "static") then out[tonumber(ws)] = true end
+    if next(d.slots) ~= nil or (d.name and d.name.mode == "static") then out[tonumber(ws)] = true end
   end
   return out
 end
@@ -78,7 +78,7 @@ on("window.open", function(w)
     if d.scheme == "grid" then
       local active = hl.get_active_workspace()
       if active and active.id == id then
-        for _, msg in ipairs(bind.place_cmds(d.scheme, i, #d.slots)) do hl.dispatch(hl.dsp.layout(msg)) end
+        for _, msg in ipairs(bind.place_cmds(d.scheme, i, config.PLACES[d.scheme])) do hl.dispatch(hl.dsp.layout(msg)) end
       end
     elseif bind.layout(d.scheme) then
       -- ponytail: wait for the layout to give the new window its position; 50 ms was enough live.

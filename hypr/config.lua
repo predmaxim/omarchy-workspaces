@@ -14,10 +14,13 @@ local function desks(t)
   for ws, d in pairs(type(t) == "table" and t or {}) do
     if type(d) == "table" and tonumber(ws) then
       local scheme = M.PLACES[d.scheme] and d.scheme or "single"
-      local slots = {}
-      for i, s in ipairs(type(d.slots) == "table" and d.slots or {}) do
-        if i <= M.PLACES[scheme] and type(s) == "table" and type(s.class) == "string" and s.class ~= "" then
-          slots[#slots + 1] = { app = s.app, class = s.class }
+      -- Places keep their numbers: an empty place (null in JSON) stays a nil hole,
+      -- so read slots with `for i = 1, M.PLACES[scheme]`, not ipairs or #.
+      local slots, raw = {}, type(d.slots) == "table" and d.slots or {}
+      for i = 1, M.PLACES[scheme] do
+        local s = raw[i]
+        if type(s) == "table" and type(s.class) == "string" and s.class ~= "" then
+          slots[i] = { app = s.app, class = s.class }
         end
       end
       out[tostring(ws)] = { scheme = scheme, slots = slots, name = type(d.name) == "table" and d.name or { mode = "number" } }

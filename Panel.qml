@@ -120,18 +120,16 @@ Item {
     })
   }
   function setOption(key, value) { root.edit(function(next) { next[key] = value }) }
-  function setScheme(ws, v) { root.editDesk(ws, function(d) { d.scheme = v; d.slots = (d.slots || []).slice(0, Model.PLACES[v]) }) }
+  function setScheme(ws, v) { root.editDesk(ws, function(d) { d.scheme = v; d.slots = Model.setSlot(d.slots, 0, (d.slots || [])[0] || null, Model.PLACES[v]) }) }
   function setNameMode(ws, v) {
     root.editDesk(ws, function(d) { d.name = v === "static" ? { mode: v, text: d.name && d.name.text || "" } : { mode: v } })
   }
   function setNameText(ws, t) { root.editDesk(ws, function(d) { d.name = { mode: "static", text: t } }) }
-  // Places fill in order: a slot past the last filled one becomes the next one.
+  // Places keep their numbers: an empty one stays null.
   function setPlace(ws, i, id) {
     var app = root.apps.filter(function(a) { return a.value === id })[0]
     root.editDesk(ws, function(d) {
-      d.slots = d.slots || []
-      if (!app) d.slots.splice(i, 1)
-      else d.slots[Math.min(i, d.slots.length)] = { app: app.value, class: app.cls }
+      d.slots = Model.setSlot(d.slots, i, app ? { app: app.value, class: app.cls } : null, Model.PLACES[d.scheme] || 1)
     })
   }
   function addSession(name) {
@@ -245,7 +243,7 @@ Item {
   function deskApps(ws) {
     var d = root.desks[String(ws)]
     if (!d) return ""
-    return d.slots.map(function(s) {
+    return d.slots.filter(function(s) { return s }).map(function(s) {
       var a = root.apps.filter(function(x) { return x.value === s.app || x.cls === s.class })[0]
       return a ? a.label : s.class
     }).join(", ")

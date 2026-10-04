@@ -35,4 +35,9 @@ assert(#bind.place_cmds("main-left", 1, 3) == 1 and bind.place_cmds("main-left",
 assert(#bind.place_cmds("grid", 1, 2) == 1 and bind.place_cmds("grid", 1, 2)[1] == "preselect r")
 assert(#bind.place_cmds("grid", 2, 2) == 1 and bind.place_cmds("grid", 2, 2)[1] == "preselect d")
 assert(#bind.place_cmds("grid", 3, 4) == 0)
+-- holes: [null, A] on left-right → A is place 2
+local holes = config.active(config.parse('{"workspaces":{"4":{"scheme":"left-right","slots":[null,{"app":"a.desktop","class":"a"}]}}}'))
+assert(holes["4"].slots[1] == nil and holes["4"].slots[2].class == "a", "hole kept")
+assert(bind.slot(holes["4"], "a", {}) == 2, "A keeps place 2")
+assert(#bind.rules(holes) == 1 and bind.rules(holes)[1].workspace == "4")
 print("bind ok")

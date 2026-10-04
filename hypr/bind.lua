@@ -7,7 +7,10 @@ local function regex(class) return "^(" .. class:gsub("[%-%.%+%*%?%[%]%(%)%^%$|\
 function M.rules(desks)
   local out = {}
   for ws, d in pairs(desks) do
-    for _, s in ipairs(d.slots) do out[#out + 1] = { class = regex(s.class), workspace = ws } end
+    for i = 1, config.PLACES[d.scheme] do
+      local s = d.slots[i]
+      if s then out[#out + 1] = { class = regex(s.class), workspace = ws } end
+    end
   end
   return out
 end
@@ -19,8 +22,10 @@ local LAYOUTS = { ["left-right"] = { layout = "master", orientation = "left" },
 function M.layout(scheme) return LAYOUTS[scheme] end
 
 function M.slot(desk, class, taken)
-  for i, s in ipairs(desk and desk.slots or {}) do
-    if s.class == class and not taken[i] then return i end
+  if not desk then return nil end
+  for i = 1, config.PLACES[desk.scheme] do
+    local s = desk.slots[i]
+    if s and s.class == class and not taken[i] then return i end
   end
   return nil
 end
