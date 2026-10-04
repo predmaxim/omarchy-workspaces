@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, setCol }")()
+  "; return { setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -95,12 +95,29 @@ for (const k of Object.keys(I.TABLES.ru)) assert.ok(used.has(k), "unused transla
 const fd = M.normalize({ sessions: { A: { workspaces: { "9": { slots: [{ app: "x", class: "x" }] } } } } })
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "q", ws: 11 }], 3, 9), [10, 12, 13])
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 10 }], 2, 9), [10, 11])
-// modal rows: plain desks, a session with desk 2 open (left-right → 2 places), settings
-const types = r => r.map(x => x.type + (x.ws ? x.ws : "") + (x.slot !== undefined ? "." + x.slot : ""))
-const rc = M.normalize({ sessions: { W: { workspaces: { "2": { scheme: "left-right" } } } }, singleInstance: [{ class: "a" }] })
-assert.deepStrictEqual(types(M.rows("main", rc, "", 0)), ["head", "set", "desk1", "desk2", "desk3", "desk4", "desk5", "desk6", "desk7", "desk8", "desk9"])
-assert.deepStrictEqual(types(M.rows("main", rc, "W", 2)).slice(0, 11), ["head", "set", "days", "from", "to", "desk1", "desk2", "name2", "scheme2", "place2.0", "place2.1"])
-assert.deepStrictEqual(types(M.rows("settings", rc, "", 0)), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])
+// modal pages
+const rc = M.normalize({ singleInstance: [{ class: "a" }] })
+assert.deepStrictEqual(M.rows("settings", rc).map(x => x.type), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])
+assert.deepStrictEqual(M.rows("desk", rc).map(x => x.type), ["head", "name", "scheme", "places"])
+assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to", "deleteSession"])
+// main page cursor
+assert.strictEqual(M.mainMove(4, 1, 0, true), 5); assert.strictEqual(M.mainMove(5, 1, 0, true), 5)
+assert.strictEqual(M.mainMove(1, 0, 1, false), 4); assert.strictEqual(M.mainMove(7, 0, 1, false), 7)
+assert.strictEqual(M.mainMove(1, 0, -1, true), "sched"); assert.strictEqual(M.mainMove(1, 0, -1, false), "head0")
+assert.strictEqual(M.mainMove("sched", 0, -1, true), "head0"); assert.strictEqual(M.mainMove("sched", 0, 1, true), 0)
+assert.strictEqual(M.mainMove("head0", 1, 0, true), "head1"); assert.strictEqual(M.mainMove("head1", 1, 0, true), "head1")
+assert.strictEqual(M.mainMove("head1", 0, 1, false), 0); assert.strictEqual(M.mainMove("head0", 0, 1, true), "sched")
+// places by geometry
+assert.strictEqual(M.placeMove("main-left", 0, 1, 0), 1); assert.strictEqual(M.placeMove("main-left", 1, 0, 1), 2)
+assert.strictEqual(M.placeMove("main-left", 2, -1, 0), 0); assert.strictEqual(M.placeMove("main-left", 1, 0, -1), -1)
+assert.strictEqual(M.placeMove("grid", 0, 0, 1), 2); assert.strictEqual(M.placeMove("grid", 3, -1, 0), 2)
+assert.strictEqual(M.placeMove("top-bottom", 1, 0, -1), 0); assert.strictEqual(M.placeMove("single", 0, 1, 0), -1)
+// tiles
+const tc = M.normalize({ workspaces: { "1": {}, "2": { scheme: "grid" }, "3": { name: { mode: "dynamic" } }, "4": { slots: [{ class: "a" }] } } }).workspaces
+assert.deepStrictEqual([undefined, tc["1"], tc["2"], tc["3"], tc["4"]].map(M.isFree), [true, true, false, false, false])
+const dn = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+assert.strictEqual(M.dayRanges([5, 1, 2, 3, 4], dn), "Mon–Fri"); assert.strictEqual(M.dayRanges([1, 2, 6, 7], dn), "Mon, Tue, Sat, Sun")
+assert.strictEqual(M.dayRanges([1, 3, 4, 5, 7], dn), "Mon, Wed–Fri, Sun")
 assert.strictEqual(M.step(["a", "b", "c"], "b", 1), "c"); assert.strictEqual(M.step(["a", "b", "c"], "c", 1), "a"); assert.strictEqual(M.step(["a", "b"], "a", -1), "b")
 const ss = { A: { schedule: { days: [1], from: "09:00", to: "12:00" } }, B: { schedule: null } }
 assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "9:00", to: "10:00" }), "time")
@@ -108,6 +125,4 @@ assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "22:00", to: "02:
 assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "11:00", to: "13:00" }), "overlap:A")
 assert.strictEqual(M.scheduleError(ss, "B", { days: [2], from: "11:00", to: "13:00" }), "")
 assert.strictEqual(M.scheduleError(ss, "A", { days: [1], from: "08:00", to: "10:00" }), "")
-assert.strictEqual(M.setCol(0, 1, ""), 1); assert.strictEqual(M.setCol(1, 1, ""), 1)   // no trash for plain desks
-assert.strictEqual(M.setCol(1, 1, "W"), 2); assert.strictEqual(M.setCol(0, -1, "W"), 0)
 console.log("ok")

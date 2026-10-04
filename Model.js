@@ -165,32 +165,76 @@ function sessionPlan(c, from, to, windows) {
 var NAME_MODES = ["number", "dynamic", "static"]
 var ACTIONS = ["focus", "ask", "replace"]
 
-// Rows of a modal page. main: the set ("" — plain desks, else a session), its
-// schedule, desks 1–9 and, under the open one, its name, scheme and places.
-function rows(page, c, set, open) {
+// Rows of a list page: settings, desk (the desk page), schedule (a session's).
+// The main page is the 3×3 tiles (mainMove).
+function rows(page, c) {
+  if (page === "desk") return [{ type: "head" }, { type: "name" }, { type: "scheme" }, { type: "places" }]
+  if (page === "schedule") return [{ type: "head" }, { type: "days" }, { type: "from" }, { type: "to" }, { type: "deleteSession" }]
   var out = [{ type: "head" }]
-  if (page === "settings") {
-    ["foreignWindow", "collapse", "collapseInSession"].forEach(function(k) { out.push({ type: "choice", key: k }) })
-    ;["sequentialLaunch", "schedule"].forEach(function(k) { out.push({ type: "switch", key: k }) })
-    c.singleInstance.forEach(function(r, i) { out.push({ type: "rule", index: i }) })
-    out.push({ type: "addRule" })
-    return out
-  }
-  out.push({ type: "set" })
-  var ds = set && c.sessions[set] ? c.sessions[set].workspaces : c.workspaces
-  if (set) out.push({ type: "days" }, { type: "from" }, { type: "to" })
-  for (var ws = 1; ws <= 9; ws++) {
-    out.push({ type: "desk", ws: ws })
-    if (ws !== open) continue
-    out.push({ type: "name", ws: ws }, { type: "scheme", ws: ws })
-    var n = PLACES[ds[String(ws)] ? ds[String(ws)].scheme : "single"]
-    for (var i = 0; i < n; i++) out.push({ type: "place", ws: ws, slot: i })
-  }
+  ;["foreignWindow", "collapse", "collapseInSession"].forEach(function(k) { out.push({ type: "choice", key: k }) })
+  ;["sequentialLaunch", "schedule"].forEach(function(k) { out.push({ type: "switch", key: k }) })
+  c.singleInstance.forEach(function(r, i) { out.push({ type: "rule", index: i }) })
+  out.push({ type: "addRule" })
   return out
 }
 
-// The set row's controls: 0 dropdown, 1 "+", 2 trash (only for a session).
-function setCol(col, dx, set) { return Math.max(0, Math.min(set ? 2 : 1, col + dx)) }
+// The main page's cursor: a tile 0–8, "sched" (the schedule row, sessions only) or
+// "head0"/"head1" (set switcher, gear). Arrows over the 3×3 grid; ↑ from the top
+// row — the schedule row, then the header.
+function mainMove(pos, dx, dy, sched) {
+  if (typeof pos === "number") {
+    var r = Math.floor(pos / 3), col = pos % 3
+    if (dy < 0 && r === 0) return sched ? "sched" : "head0"
+    return Math.max(0, Math.min(2, r + dy)) * 3 + Math.max(0, Math.min(2, col + dx))
+  }
+  if (pos === "sched") return dy < 0 ? "head0" : dy > 0 ? 0 : pos
+  if (dy > 0) return sched ? "sched" : 0
+  return dx ? "head" + Math.max(0, Math.min(1, Number(pos.slice(4)) + dx)) : pos
+}
+
+// Places of a scheme as {x, y, w, h} fractions of the desk, in place order
+// (grid: as the engine fills it — top left, top right, bottom left, bottom right).
+var GEOMETRY = {
+  single: [[0, 0, 1, 1]],
+  "left-right": [[0, 0, 0.6, 1], [0.6, 0, 0.4, 1]],
+  "top-bottom": [[0, 0, 1, 0.5], [0, 0.5, 1, 0.5]],
+  "main-left": [[0, 0, 0.6, 1], [0.6, 0, 0.4, 0.5], [0.6, 0.5, 0.4, 0.5]],
+  grid: [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]]
+}
+function geometry(scheme) {
+  return (GEOMETRY[scheme] || GEOMETRY.single).map(function(g) { return { x: g[0], y: g[1], w: g[2], h: g[3] } })
+}
+
+// The place next to place i (0-based) in direction dx/dy: the nearest one whose
+// centre lies that way; -1 when there is none (↑ from the top leaves the drawing).
+function placeMove(scheme, i, dx, dy) {
+  var g = geometry(scheme), c = g[i], best = -1, bestD = Infinity
+  var cx = c.x + c.w / 2, cy = c.y + c.h / 2
+  g.forEach(function(p, j) {
+    var px = p.x + p.w / 2 - cx, py = p.y + p.h / 2 - cy
+    if (j === i || px * dx <= 0 && dx || py * dy <= 0 && dy) return
+    var d = Math.abs(px) + Math.abs(py)
+    if (d < bestD) { bestD = d; best = j }
+  })
+  return best
+}
+
+// Tile of the main page: free — nothing to show (no bindings, no name, one window).
+function isFree(desk) {
+  return !desk || (!hasSlots(desk) && desk.scheme === "single" && (desk.name.mode || "number") === "number")
+}
+
+// Schedule days as text: runs of 3+ days as "Mon–Fri", others by commas.
+function dayRanges(days, names) {
+  var d = (days || []).slice().sort(function(a, b) { return a - b }), out = []
+  for (var i = 0; i < d.length; i++) {
+    var j = i
+    while (j + 1 < d.length && d[j + 1] === d[j] + 1) j++
+    if (j - i >= 2) { out.push(names[d[i] - 1] + "–" + names[d[j] - 1]); i = j }
+    else out.push(names[d[i] - 1])
+  }
+  return out.join(", ")
+}
 
 // The value next to `value` in `list`, dx steps away, round the list.
 function step(list, value, dx) {
