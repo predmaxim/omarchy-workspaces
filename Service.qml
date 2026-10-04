@@ -200,7 +200,7 @@ Item {
   // ws, slot: the edited place. A class launched < 15 s ago isn't launched again.
   property var launchedAt: ({})
   function applyActive(ws, slot) {
-    if (root.phase !== "") return
+    if (root.busy() || root.loadError !== "") return
     var p = Model.applyPlan(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow(), ws, slot)
     p.launch = p.launch.filter(function(l) { return !(Date.now() - (root.launchedAt[l.class] || 0) < 15000) })
     p.launch.forEach(function(l) { root.launchedAt[l.class] = Date.now() })
@@ -208,6 +208,37 @@ Item {
       root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
     })
     if (!p.launch.length) return
+    root.phase = "launching"
+    root.launchQueue = p.launch
+    root.launchNext()
+  }
+
+  // A switch is running, being planned or waits for confirmation: launching now
+  // would start apps the switch is about to close.
+  function busy() { return root.phase !== "" || planTimer.running || root.pendingPlan !== null }
+
+  // «Launch» on the set in force: all its missing apps, open bound ones to their desks.
+  // Plans after refreshToplevels has updated the windows (it is asynchronous).
+  function launchActive() {
+    if (root.busy() || launchTimer.running) return
+    if (root.loadError !== "") {
+      Quickshell.execDetached(["omarchy-notification-send", "-u", "normal", root.tr("Workspaces"),
+                               root.tr("config.json is broken — session %1 not started", root.cfg.activeSession || root.tr("No session"))])
+      return
+    }
+    Hyprland.refreshToplevels()
+    launchTimer.start()
+  }
+  Timer { id: launchTimer; interval: 300; onTriggered: root.launchNow() }
+  function launchNow() {
+    if (root.busy()) return
+    var p = Model.launchPlan(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow())
+    p.move.forEach(function(m) {
+      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+    })
+    p.launch = p.launch.filter(function(l) { return !(Date.now() - (root.launchedAt[l.class] || 0) < 15000) })
+    if (!p.launch.length) return
+    p.launch.forEach(function(l) { root.launchedAt[l.class] = Date.now() })
     root.phase = "launching"
     root.launchQueue = p.launch
     root.launchNext()

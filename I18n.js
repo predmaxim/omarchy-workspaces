@@ -60,6 +60,8 @@ var TABLES = {
     "Overlaps with %1": "Пересекается с «%1»",
     "Pick the days": "Выберите дни",
     "Regular": "Обычные",
+    "Launch the apps": "Запустить приложения",
+    "Switch to this set": "Переключиться на этот набор",
     "Rename session": "Переименовать сессию",
     "Type a name": "Введите имя",
     "This name is taken by the regular desks": "Это имя занято обычными столами",

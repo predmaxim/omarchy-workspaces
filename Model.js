@@ -221,6 +221,15 @@ function applyPlan(c, active, windows, ws, slot) {
   return out
 }
 
+// «Launch» on the set in force: every missing app of it, open bound apps to their
+// desks; nothing closes, windows of other apps stay.
+function launchPlan(c, active, windows) {
+  var p = sessionPlan(c, active, active, windows)
+  var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces), byAddr = {}
+  windows.forEach(function(w) { byAddr[w.address] = w })
+  return { launch: p.launch, move: p.move.filter(function(m) { return byAddr[m.addr] && cls[byAddr[m.addr].class] !== undefined }) }
+}
+
 // ------------------------------------------------------------ the modal
 
 var NAME_MODES = ["number", "dynamic", "static"]
@@ -240,7 +249,7 @@ function rows(page, c) {
 }
 
 // The main page's cursor: a tile 0–8, "sched" (the schedule row, sessions only) or
-// "head0"/"head1" (set switcher, gear). Arrows over the 3×3 grid; ↑ from the top
+// "head0"/"head1"/"head2" (set switcher, launch, gear). Arrows over the 3×3 grid; ↑ from the top
 // row — the schedule row, then the header.
 function mainMove(pos, dx, dy, sched) {
   if (typeof pos === "number") {
@@ -250,7 +259,7 @@ function mainMove(pos, dx, dy, sched) {
   }
   if (pos === "sched") return dy < 0 ? "head0" : dy > 0 ? 0 : pos
   if (dy > 0) return sched ? "sched" : 0
-  return dx ? "head" + Math.max(0, Math.min(1, Number(pos.slice(4)) + dx)) : pos
+  return dx ? "head" + Math.max(0, Math.min(2, Number(pos.slice(4)) + dx)) : pos
 }
 
 // Places of a scheme as {x, y, w, h} fractions of the desk, in place order

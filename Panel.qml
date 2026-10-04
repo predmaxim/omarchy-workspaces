@@ -161,6 +161,15 @@ Item {
     if (to.trim() !== root.set && root.service.loadError === "") { root.service.save(r.raw); root.set = to.trim() }
     return true
   }
+  readonly property string activeSet: cfg.sessions[cfg.activeSession] ? cfg.activeSession : ""
+  // «Launch»: the set in force — launch its missing apps; another one — switch to it
+  // (the switch asks before closing and launches its apps). Editing alone launches nothing
+  // but the edited place of the set in force.
+  function launchSet() {
+    if (!root.service) return
+    if (root.set === root.activeSet) root.service.launchActive()
+    else root.service.requestSession(root.set)
+  }
   function deleteSession() {
     var name = root.set
     root.edit(function(next) { delete next.sessions[name]; if (next.activeSession === name) next.activeSession = "" })
@@ -219,7 +228,7 @@ Item {
     if (root.confirming) { if (root.service.phase === "launching") root.host.close(); else root.service.cancelSwitch() }
     else if (root.page === "desk") { root.pos = root.deskWs - 1; root.showPage("main") }
     else if (root.page === "schedule") { root.pos = "sched"; root.showPage("main") }
-    else if (root.page === "settings") { root.pos = "head1"; root.showPage("main") }
+    else if (root.page === "settings") { root.pos = "head2"; root.showPage("main") }
     else root.host.close()
   }
   function arrow(dx, dy) {
@@ -247,7 +256,8 @@ Item {
     if (root.page === "main") {
       if (typeof root.pos === "number") root.openDesk(root.pos + 1)
       else if (root.pos === "sched") root.showPage("schedule")
-      else if (root.pos === "head1") root.showPage("settings")
+      else if (root.pos === "head1") root.launchSet()
+      else if (root.pos === "head2") root.showPage("settings")
       else if (root.adding) root.focusNameField()
       else if (root.setPicker) root.setPicker.open()
       return
@@ -419,11 +429,20 @@ Item {
                   Connections { target: root; function onFocusNameField() { nameField.forceActiveFocus() } }
                 }
                 IconButton {
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.page === "main"
+                  iconText: "󰐊"
+                  tooltipText: root.set === root.activeSet ? root.tr("Launch the apps") : root.tr("Switch to this set")
+                  hasCursor: root.pos === "head1"
+                  iconSpinning: root.service !== null && root.service.phase === "launching"
+                  onClicked: { root.pos = "head1"; root.launchSet() }
+                }
+                IconButton {
                   readonly property bool back: root.page !== "main"
                   anchors.verticalCenter: parent.verticalCenter
                   iconText: back ? "󰁍" : "󰒓"
                   tooltipText: back ? root.tr("Back") : root.tr("Settings")
-                  hasCursor: back ? root.cursor === 0 : root.pos === "head1"
+                  hasCursor: back ? root.cursor === 0 : root.pos === "head2"
                   onClicked: { if (back) root.back(); else root.showPage("settings") }
                 }
               }

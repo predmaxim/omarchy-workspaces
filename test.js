@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -108,6 +108,8 @@ assert.deepStrictEqual(M.applyPlan(M.normalize({ workspaces: { "3": { slots: [{ 
 assert.strictEqual(M.renameSession({ sessions: { A: {} } }, "A", "toString", "").raw.sessions.toString !== undefined, true)
 assert.strictEqual(M.renameSession({ sessions: { A: {} } }, "constructor", "B", "").error, "missing")
 assert.strictEqual(M.appNameOf("foo", [{ id: "foo.desktop", name: "", startupClass: "" }]), "Foo")
+assert.deepStrictEqual(M.launchPlan(ap, "S", wins), { launch: [{ ws: "1", slot: 2, app: "foot.desktop", class: "foot" }], move: [{ addr: "a", ws: 2 }] },
+  "launch: all missing apps, bound moves only, no close")
 // app names
 assert.strictEqual(M.prettyClass("org.omarchy.agent"), "Agent"); assert.strictEqual(M.prettyClass("chrome-www.youtube.com__-Default"), "Youtube")
 assert.strictEqual(M.prettyClass("foot"), "Foot")
@@ -134,7 +136,7 @@ assert.strictEqual(M.mainMove(4, 1, 0, true), 5); assert.strictEqual(M.mainMove(
 assert.strictEqual(M.mainMove(1, 0, 1, false), 4); assert.strictEqual(M.mainMove(7, 0, 1, false), 7)
 assert.strictEqual(M.mainMove(1, 0, -1, true), "sched"); assert.strictEqual(M.mainMove(1, 0, -1, false), "head0")
 assert.strictEqual(M.mainMove("sched", 0, -1, true), "head0"); assert.strictEqual(M.mainMove("sched", 0, 1, true), 0)
-assert.strictEqual(M.mainMove("head0", 1, 0, true), "head1"); assert.strictEqual(M.mainMove("head1", 1, 0, true), "head1")
+assert.strictEqual(M.mainMove("head0", 1, 0, true), "head1"); assert.strictEqual(M.mainMove("head2", 1, 0, true), "head2")
 assert.strictEqual(M.mainMove("head1", 0, 1, false), 0); assert.strictEqual(M.mainMove("head0", 0, 1, true), "sched")
 // places by geometry
 assert.strictEqual(M.placeMove("main-left", 0, 1, 0), 1); assert.strictEqual(M.placeMove("main-left", 1, 0, 1), 2)
