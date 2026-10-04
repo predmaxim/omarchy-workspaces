@@ -253,15 +253,22 @@ Item {
     root.launchNext()
   }
 
+  // Like the Omarchy launcher (AppLibrary.qml): gtk-launch the desktop entry by id.
+  function launchApp(id) {
+    var d = String(id || "")
+    if (!d) return
+    Quickshell.execDetached(["uwsm-app", "--", "gtk-launch", /\.desktop$/.test(d) ? d : d + ".desktop"])
+  }
+
   function launchNext() {
     if (root.launchQueue.length === 0) { root.phase = ""; root.plan = null; return }
     if (!root.cfg.sequentialLaunch) {
-      root.launchQueue.forEach(function(l) { Quickshell.execDetached(["uwsm-app", "--", l.app]) })
+      root.launchQueue.forEach(function(l) { root.launchApp(l.app) })
       root.launchQueue = []
       root.launchNext()
       return
     }
-    Quickshell.execDetached(["uwsm-app", "--", root.launchQueue[0].app])
+    root.launchApp(root.launchQueue[0].app)
     launchWait.cls = root.launchQueue[0].class
     launchWait.elapsed = 0
     launchWait.start()
