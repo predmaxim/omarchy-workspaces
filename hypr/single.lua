@@ -1,11 +1,10 @@
 -- Single-instance windows: an app with a rule doesn't keep a second window.
 --
--- Rules, in hyprland.lua after the Omarchy defaults:
---   require("single").setup(function() return cfg.singleInstance end) -- rules:
---   {
---     { class = "chrome-youtube.com__-Default", action = "focus" },
---     { match = "^chrome%-telemost%.[%w.]*yandex%.ru__j_", action = "ask", name = "встречи Телемоста" },
---   })
+-- Rules come from cfg.singleInstance (config.json), via init.lua:
+--   single.setup(function() return cfg.singleInstance end)
+-- Example list:
+--   { class = "chrome-youtube.com__-Default", action = "focus" },
+--   { match = "^chrome%-telemost%.[%w.]*yandex%.ru__j_", action = "ask", name = "встречи Телемоста" },
 -- class is the exact window class; match is a Lua pattern (escape - and . with %).
 -- Every window matching the same rule is the same app; the first matching rule wins.
 --   focus:   close the new window, focus the old one. The handler runs inside Hyprland
