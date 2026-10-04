@@ -33,20 +33,22 @@ Item {
     printErrors: false
     onFileChanged: reload()
     onLoaded: {
-      try { root.raw = JSON.parse(text()); root.loadError = "" }
-      catch (e) { root.loadError = String(e) }   // keep the last good one
-      // At login (the shell starts with the session): the scheduled session, once.
-      if (!root.scheduleChecked) {
-        root.scheduleChecked = true
-        var name = Model.scheduleAt(root.cfg, new Date())
-        if (name && name !== root.cfg.activeSession) root.requestSession(name)
-      }
+      try {
+        root.raw = JSON.parse(text()); root.loadError = ""
+        // At login (the shell starts with the session): the scheduled session, once,
+        // after the first successful read.
+        if (!root.scheduleChecked) {
+          root.scheduleChecked = true
+          var name = Model.scheduleAt(root.cfg, new Date())
+          if (name && name !== root.cfg.activeSession) root.requestSession(name)
+        }
+      } catch (e) { root.loadError = String(e) }   // keep the last good one
     }
   }
 
   function save(next) {
     root.raw = next
-    Quickshell.execDetached(["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1.tmp" && mv "$1.tmp" "$1" && hyprctl reload >/dev/null',
+    Quickshell.execDetached(["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1.$$" && mv "$1.$$" "$1" && hyprctl reload >/dev/null',
                              "sh", root.path, JSON.stringify(next, null, 2)])
   }
 
@@ -63,16 +65,29 @@ Item {
   // ------------------------------------------------------------ switching
 
   function requestSession(name) {
-    if (root.phase !== "") return
+    if (root.phase !== "" || planTimer.running) return
+    if (name !== "" && !root.cfg.sessions[name]) return
+    // refreshToplevels is asynchronous: plan from fresh data after it settles.
+    Hyprland.refreshToplevels()
+    root.wanted = name
+    planTimer.restart()
+  }
+  property string wanted: ""
+  Timer { id: planTimer; interval: 300; onTriggered: root.planFor(root.wanted) }
+  function planFor(name) {
     var now = root.windowsNow()
     var p = Model.sessionPlan(root.cfg, root.cfg.activeSession, name, now)
     root.plan = p
     root.pendingPlan = { to: name, close: now.filter(function(w) { return p.close.indexOf(w.address) >= 0 }), waitingUdisks: false }
     if (root.pendingPlan.close.length === 0) root.confirmSwitch()   // nothing to close — no question
   }
-  function cancelSwitch() { root.pendingPlan = null; root.plan = null; root.phase = "" }
+  function cancelSwitch() {
+    if (root.phase === "launching") return
+    planTimer.stop(); udisksRetry.stop(); closeWait.stop(); launchWait.stop()
+    root.pendingPlan = null; root.plan = null; root.stuck = []; root.phase = ""
+  }
   function confirmSwitch() {
-    if (!root.pendingPlan) return
+    if (!root.pendingPlan || root.phase !== "") return
     root.phase = "udisks"
     udisksProc.running = true
   }
@@ -116,8 +131,10 @@ Item {
   function finishSwitch() {
     var to = root.pendingPlan.to
     var moves = root.plan.move.slice()
-    var free = Math.max.apply(null, [0].concat(moves.map(function(m) { return m.ws }))) + 1
-    root.stuck.forEach(function(a) { moves.push({ addr: a, ws: free++ }) })
+    var start = Math.max.apply(null, [0].concat(moves.map(function(m) { return m.ws }), Object.keys(root.cfg.sessions[to] ? root.cfg.sessions[to].workspaces : root.cfg.workspaces).map(Number))) + 1
+    var staying = root.windowsNow().filter(function(w) { return root.stuck.indexOf(w.address) < 0 && root.plan.close.indexOf(w.address) < 0 })
+    var spots = Model.freeDesks(to && root.cfg.sessions[to] ? root.cfg.sessions[to].workspaces : root.cfg.workspaces, staying, root.stuck.length, start)
+    root.stuck.forEach(function(a, i) { moves.push({ addr: a, ws: spots[i] }) })
     moves.forEach(function(m) {
       root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
     })
@@ -161,7 +178,10 @@ Item {
 
   IpcHandler {
     target: "predmaxim.workspaces"
-    function session(name: string): string { root.requestSession(name); return "ok" }
+    function session(name: string): string {
+      if (name !== "" && !root.cfg.sessions[name]) return "unknown session: " + name
+      root.requestSession(name); return "ok"
+    }
     function status(): string { return JSON.stringify({ active: root.cfg.activeSession, phase: root.phase, error: root.loadError }) }
   }
 }

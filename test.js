@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, PLACES }")()
+  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -84,3 +84,8 @@ for (const f of ["Model.js", "Service.qml", "BarWidget.qml", "Panel.qml"]) {
 }
 for (const k of Object.keys(I.TABLES.ru)) assert.ok(used.has(k), "unused translation: " + k)
 console.log("ok")
+
+// freeDesks: skips session desks and desks with staying windows
+const fd = M.normalize({ sessions: { A: { workspaces: { "9": { slots: [{ app: "x", class: "x" }] } } } } })
+assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "q", ws: 11 }], 3, 9), [10, 12, 13])
+assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 10 }], 2, 9), [10, 11])

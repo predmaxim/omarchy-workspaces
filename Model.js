@@ -90,6 +90,26 @@ function classesOf(ds) {
   return out
 }
 
+// First desk >= from that is not a session desk and holds no window that stays.
+function freeDesk(next, occupied, moved, from) {
+  var n = from
+  while (next[String(n)] || (occupied[String(n)] && !moved[String(n)])) n++
+  return n
+}
+
+// count free desks from `from` on, for windows leaving the session (unclosable ones).
+// windows: the ones that stay (not the leaving ones).
+function freeDesks(next, windows, count, from) {
+  var occupied = Object.create(null), moved = Object.create(null), cls = classesOf(next), out = []
+  windows.forEach(function(w) {
+    occupied[String(w.ws)] = true
+    if (cls[w.class] !== undefined || next[String(w.ws)]) moved[String(w.ws)] = true
+  })
+  var n = from
+  for (var i = 0; i < count; i++) { n = freeDesk(next, occupied, moved, n); out.push(n++) }
+  return out
+}
+
 // What a switch does to the open windows: close the previous session's apps that the
 // next one doesn't have; move the next one's open apps to their desks; strangers on the
 // next session's desks go after its last desk; launch the missing apps by place order.
@@ -115,7 +135,7 @@ function sessionPlan(c, from, to, windows) {
     } else if (next[String(w.ws)]) {
       moved[String(w.ws)] = true
       // Find next free desk: skip session desks and desks with unmoved windows
-      while (next[String(free)] || (occupied[String(free)] && !moved[String(free)])) free++
+      free = freeDesk(next, occupied, moved, free)
       plan.move.push({ addr: w.address, ws: free })
       free++
     }
