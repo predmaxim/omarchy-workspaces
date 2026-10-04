@@ -3,7 +3,10 @@
 // string missing from a table shows in English. tr("… %1", x) fills in %1, %2…
 // after the lookup.
 var TABLES = {
-  ru: {}
+  ru: {
+    "Workspaces": "Рабочие столы",
+    "Not closed: %1": "Не закрыто: %1"
+  }
 }
 
 // Text follows LC_MESSAGES, overridden by LC_ALL and defaulting to LANG, as

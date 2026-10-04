@@ -1,0 +1,10 @@
+{
+  "schemaVersion": 1,
+  "id": "predmaxim.workspaces",
+  "name": "Workspaces",
+  "version": "1.0.0",
+  "author": "predmaxim",
+  "description": "Workspaces with app bindings, names and sessions",
+  "kinds": ["service"],
+  "entryPoints": { "service": "Service.qml" }
+}
