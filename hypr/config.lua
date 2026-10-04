@@ -41,7 +41,8 @@ function M.parse(text)
   for name, s in pairs(type(raw.sessions) == "table" and raw.sessions or {}) do
     if type(s) == "table" then c.sessions[name] = { workspaces = desks(s.workspaces), schedule = s.schedule } end
   end
-  c.activeSession = type(raw.activeSession) == "string" and raw.activeSession or nil
+  -- "" is truthy in Lua; an ended session is stored as "".
+  c.activeSession = type(raw.activeSession) == "string" and raw.activeSession ~= "" and raw.activeSession or nil
   return c
 end
 
@@ -51,14 +52,35 @@ function M.active(c)
   return s and s.workspaces or c.workspaces
 end
 
-local last = M.parse("{}")
-function M.load(path)
-  local f = io.open(path or M.PATH)
-  if not f then last = M.parse("{}"); return last end
-  local text = f:read("a"); f:close()
+-- Hyprland starts a fresh Lua state on every reload, so the last good file and the last
+-- reported error are kept on disk.
+M.CACHE = (os.getenv("XDG_CACHE_HOME") or os.getenv("HOME") .. "/.cache") .. "/predmaxim.workspaces/"
+
+local function slurp(p)
+  local f = io.open(p); if not f then return nil end
+  local t = f:read("a"); f:close(); return t
+end
+local function put(p, text)
+  if slurp(p) == text then return end
+  local f = io.open(p, "w")
+  if not f then os.execute("mkdir -p '" .. p:match("(.*/)") .. "'"); f = io.open(p, "w") end
+  if f then f:write(text); f:close() end
+end
+
+-- A broken file: log, notify once per distinct error, run on the last good one.
+function M.load(path, cache)
+  cache = cache or M.CACHE
+  local text = slurp(path or M.PATH)
+  if not text then return M.parse("{}") end
   local c, err = M.parse(text)
-  if c then last = c else print("predmaxim.workspaces: config.json: " .. tostring(err) .. " — keeping the last good one") end
-  return last
+  if c then put(cache .. "last-good.json", text); put(cache .. "error", ""); return c end
+  local msg = "config.json: " .. tostring(err) .. " — keeping the last good one"
+  print("predmaxim.workspaces: " .. msg)
+  if slurp(cache .. "error") ~= msg and hl then
+    hl.exec_cmd("omarchy-notification-send -u critical 'Workspaces' '" .. msg:sub(1, 200):gsub("'", "'\\''") .. "'")
+  end
+  put(cache .. "error", msg)
+  return M.parse(slurp(cache .. "last-good.json") or "{}") or M.parse("{}")
 end
 
 return M

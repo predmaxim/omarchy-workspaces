@@ -23,6 +23,9 @@ cfg.foreignWindow = "next"
 local f = bind.foreign(cfg, desks, "1", { 1, 2, 3 })
 assert(f.action == "move" and f.workspace == 4, "first free desk without bindings")
 assert(bind.foreign(cfg, desks, "5", {}).action == "tile", "desk without a scheme keeps it")
+assert(bind.foreign(cfg, desks, "2", {}).action == "tile", "single desk keeps it")
+local one = config.active(config.parse('{"workspaces":{"3":{"scheme":"left-right","slots":[{"class":"a"}]}}}'))
+assert(bind.foreign(cfg, one, "3", {}).action == "move", "scheme with one bound place still guards it")
 -- place_cmds: exact strings as per controller decision
 assert(#bind.place_cmds("single", 1, 1) == 0)
 assert(#bind.place_cmds("left-right", 1, 2) == 1 and bind.place_cmds("left-right", 1, 2)[1] == "swapwithmaster master")

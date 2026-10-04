@@ -24,9 +24,11 @@ function M.plan(workspaces, mode, fixed)
   return moves
 end
 
+function M.mode(cfg) return cfg.activeSession and cfg.collapseInSession or cfg.collapse end
+
 function M.run(get_cfg, fixed_of)
   local cfg = get_cfg()
-  local mode = cfg.activeSession and cfg.collapseInSession or cfg.collapse
+  local mode = M.mode(cfg)
   local list = {}
   for _, w in ipairs(hl.get_workspaces()) do list[#list + 1] = { id = w.id, windows = w.windows } end
   local moves = M.plan(list, mode, fixed_of(cfg))

@@ -46,10 +46,21 @@ Item {
     }
   }
 
-  function save(next) {
+  // Writes config.json and reloads Hyprland; refuses over a broken file (the user fixes it by hand).
+  // then(ok) runs after the write and the reload.
+  function save(next, then) {
+    if (root.loadError !== "") return false
     root.raw = next
-    Quickshell.execDetached(["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1.$$" && mv "$1.$$" "$1" && hyprctl reload >/dev/null',
-                             "sh", root.path, JSON.stringify(next, null, 2)])
+    saveProc.then = then || null
+    saveProc.command = ["sh", "-c", 'mkdir -p "${1%/*}" && printf "%s\\n" "$2" > "$1.$$" && mv "$1.$$" "$1" && hyprctl reload >/dev/null',
+                        "sh", root.path, JSON.stringify(next, null, 2)]
+    saveProc.running = true
+    return true
+  }
+  Process {
+    id: saveProc
+    property var then: null
+    onExited: function(code) { var t = then; then = null; if (t) t(code === 0) }
   }
 
   function windowsNow() {
@@ -90,6 +101,7 @@ Item {
   }
   function confirmSwitch() {
     if (!root.pendingPlan || root.phase !== "") return
+    if (root.loadError !== "") { root.cancelSwitch(); return }   // can't record the session over a broken file
     root.phase = "udisks"
     udisksProc.running = true
   }
@@ -137,20 +149,24 @@ Item {
     var staying = root.windowsNow().filter(function(w) { return root.stuck.indexOf(w.address) < 0 && root.plan.close.indexOf(w.address) < 0 })
     var spots = Model.freeDesks(to && root.cfg.sessions[to] ? root.cfg.sessions[to].workspaces : root.cfg.workspaces, staying, root.stuck.length, start)
     root.stuck.forEach(function(a, i) { moves.push({ addr: a, ws: spots[i] }) })
-    moves.forEach(function(m) {
-      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
-    })
     if (root.stuck.length) {
       var titles = root.pendingPlan.close.filter(function(w) { return root.stuck.indexOf(w.address) >= 0 }).map(function(w) { return w.title })
       Quickshell.execDetached(["omarchy-notification-send", "-u", "normal", root.tr("Workspaces"), root.tr("Not closed: %1", titles.join(", "))])
     }
     var next = JSON.parse(JSON.stringify(root.raw))
     next.activeSession = to
-    root.save(next)
-    root.launchQueue = root.plan.launch.slice()
     root.pendingPlan = null
     root.phase = "launching"
-    root.launchNext()
+    // Write and reload first: the new session's rules must be in force before moves and launches.
+    var ok = root.save(next, function(saved) {
+      if (!saved) { root.phase = ""; root.plan = null; return }
+      moves.forEach(function(m) {
+        root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+      })
+      root.launchQueue = root.plan.launch.slice()
+      root.launchNext()
+    })
+    if (!ok) { root.phase = ""; root.plan = null }
   }
 
   function launchNext() {

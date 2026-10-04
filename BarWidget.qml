@@ -54,6 +54,11 @@ Panel {
       var id = values[i].id
       if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
     }
+    // Desks with bindings or an own name show even when empty.
+    Object.keys(root.desks).forEach(function(ws) {
+      var d = root.desks[ws], id = Number(ws)
+      if ((d.slots.length || d.name.mode === "static") && id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+    })
     ids.sort(function(left, right) { return left - right })
     return ids
   }

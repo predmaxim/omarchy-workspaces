@@ -107,7 +107,7 @@ Item {
   // ------------------------------------------------------------ editing: copy raw, change, save
 
   function edit(fn) {
-    if (!root.service) return
+    if (!root.service || root.service.loadError !== "") return   // broken config.json: no edits
     var next = JSON.parse(JSON.stringify(root.service.raw))
     fn(next)
     root.service.save(next)
@@ -245,7 +245,7 @@ Item {
   function deskApps(ws) {
     var d = root.desks[String(ws)]
     if (!d) return ""
-    return root.schemeGlyphs[d.scheme] + "  " + d.slots.map(function(s) {
+    return d.slots.map(function(s) {
       var a = root.apps.filter(function(x) { return x.value === s.app || x.cls === s.class })[0]
       return a ? a.label : s.class
     }).join(", ")
@@ -343,6 +343,16 @@ Item {
                 hasCursor: root.cursor === 0
                 onClicked: { root.cursor = 0; root.activate(0) }
               }
+            }
+
+            Text {
+              visible: !root.confirming && root.service && root.service.loadError !== ""
+              width: head.width
+              text: root.service ? root.tr("config.json is broken, edits are off: %1", root.service.loadError) : ""
+              color: Color.urgent
+              font.family: root.font
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
             }
 
             // The Bluetooth panel's gap: Style.space(14) above and below the line.

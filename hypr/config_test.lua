@@ -18,4 +18,13 @@ local s = config.parse('{"workspaces":{"1":{"scheme":"single","slots":[{"class":
 assert(#s.workspaces["1"].slots == 1, "slots cut to the scheme's places")
 local bad, err = config.parse("{")
 assert(bad == nil and err)
+local ended = config.parse('{"activeSession":"","collapse":"all","collapseInSession":"off"}')
+assert(ended.activeSession == nil, '"" is no session')
+assert(require("predmaxim_workspaces.collapse").mode(ended) == "all", "ended session -> plain collapse")
+local tmp, cache = os.tmpname(), os.tmpname() .. ".d/"
+local fh = io.open(tmp, "w"); fh:write('{"collapse":"all"}'); fh:close()
+assert(config.load(tmp, cache).collapse == "all")
+fh = io.open(tmp, "w"); fh:write("{"); fh:close()
+assert(config.load(tmp, cache).collapse == "all", "broken file -> last good")
+os.remove(tmp); os.execute("rm -r '" .. cache .. "'")
 print("config ok")

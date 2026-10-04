@@ -27,7 +27,7 @@ end
 
 function M.foreign(cfg, desks, ws, occupied)
   local d = desks[tostring(ws)]
-  if not d or #d.slots < 2 or cfg.foreignWindow == "tile" then return { action = "tile" } end
+  if not d or d.scheme == "single" or cfg.foreignWindow == "tile" then return { action = "tile" } end
   if cfg.foreignWindow == "float" then return { action = "float" } end
   local busy = {}
   for _, n in ipairs(occupied) do busy[n] = true end

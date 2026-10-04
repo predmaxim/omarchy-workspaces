@@ -159,13 +159,25 @@ CursorSurface {
     }
     Component {
       id: deskControl
-      Text {
-        width: Math.min(implicitWidth, row.width * 0.5)
-        text: row.panel.deskApps(row.modelData.ws)
-        color: row.panel.dim
-        font.family: row.panel.font
-        font.pixelSize: Style.font.body
-        elide: Text.ElideRight
+      Row {
+        spacing: Style.space(8)
+        Text {
+          anchors.verticalCenter: parent.verticalCenter
+          width: Math.min(implicitWidth, row.width * 0.5)
+          text: row.panel.deskApps(row.modelData.ws)
+          color: row.panel.dim
+          font.family: row.panel.font
+          font.pixelSize: Style.font.body
+          elide: Text.ElideRight
+        }
+        Text {
+          visible: row.desk !== null
+          anchors.verticalCenter: parent.verticalCenter
+          text: row.desk ? row.panel.schemeGlyphs[row.desk.scheme] : ""
+          color: row.panel.dim
+          font.family: row.panel.font
+          font.pixelSize: Style.font.title
+        }
       }
     }
     Component {
@@ -197,6 +209,7 @@ CursorSurface {
       ButtonGroup {
         options: Model.SCHEMES.map(function(s) { return { value: s, label: row.panel.schemeGlyphs[s], tooltip: row.panel.schemeNames[s] } })
         value: row.desk ? row.desk.scheme : "single"
+        fontSize: Style.font.subtitle * 1.5
         focusable: false
         foreground: row.panel.fg
         fontFamily: row.panel.font
