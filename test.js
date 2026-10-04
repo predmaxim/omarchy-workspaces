@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES }")()
+  "; return { normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -76,7 +76,7 @@ assert.deepStrictEqual(plan2.move, [{ addr: "x", ws: 4 }], "stranger skips occup
 // translations: every tr("...") in QML and Model.js has a Russian line, no unused ones
 const I = new Function(fs.readFileSync(__dirname + "/I18n.js", "utf8").replace(".pragma library", "") + "; return { TABLES }")()
 const used = new Set()
-for (const f of ["Model.js", "Service.qml", "BarWidget.qml", "Panel.qml"]) {
+for (const f of ["Model.js", "Service.qml", "BarWidget.qml", "Panel.qml", "PanelRow.qml"]) {
   if (!fs.existsSync(__dirname + "/" + f)) continue
   for (const m of fs.readFileSync(__dirname + "/" + f, "utf8").matchAll(/tr\("((?:[^"\\]|\\.)*)"/g)) {
     used.add(m[1]); assert.ok(m[1] in I.TABLES.ru, f + ": no ru for " + m[1])
@@ -88,4 +88,17 @@ for (const k of Object.keys(I.TABLES.ru)) assert.ok(used.has(k), "unused transla
 const fd = M.normalize({ sessions: { A: { workspaces: { "9": { slots: [{ app: "x", class: "x" }] } } } } })
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "q", ws: 11 }], 3, 9), [10, 12, 13])
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 10 }], 2, 9), [10, 11])
+// modal rows: plain desks, a session with desk 2 open (left-right → 2 places), settings
+const types = r => r.map(x => x.type + (x.ws ? x.ws : "") + (x.slot !== undefined ? "." + x.slot : ""))
+const rc = M.normalize({ sessions: { W: { workspaces: { "2": { scheme: "left-right" } } } }, singleInstance: [{ class: "a" }] })
+assert.deepStrictEqual(types(M.rows("main", rc, "", 0)), ["head", "set", "desk1", "desk2", "desk3", "desk4", "desk5", "desk6", "desk7", "desk8", "desk9"])
+assert.deepStrictEqual(types(M.rows("main", rc, "W", 2)).slice(0, 9), ["head", "set", "schedule", "desk1", "desk2", "name2", "scheme2", "place2.0", "place2.1"])
+assert.deepStrictEqual(types(M.rows("settings", rc, "", 0)), ["head", "choice", "choice", "choice", "switch", "switch", "rule", "addRule"])
+assert.strictEqual(M.step(["a", "b", "c"], "b", 1), "c"); assert.strictEqual(M.step(["a", "b", "c"], "c", 1), "a"); assert.strictEqual(M.step(["a", "b"], "a", -1), "b")
+const ss = { A: { schedule: { days: [1], from: "09:00", to: "12:00" } }, B: { schedule: null } }
+assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "9:00", to: "10:00" }), "time")
+assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "22:00", to: "02:00" }), "order")
+assert.strictEqual(M.scheduleError(ss, "B", { days: [1], from: "11:00", to: "13:00" }), "overlap:A")
+assert.strictEqual(M.scheduleError(ss, "B", { days: [2], from: "11:00", to: "13:00" }), "")
+assert.strictEqual(M.scheduleError(ss, "A", { days: [1], from: "08:00", to: "10:00" }), "")
 console.log("ok")

@@ -147,3 +147,51 @@ function sessionPlan(c, from, to, windows) {
   })
   return plan
 }
+
+// ------------------------------------------------------------ the modal
+
+var NAME_MODES = ["number", "dynamic", "static"]
+var ACTIONS = ["focus", "ask", "replace"]
+
+// Rows of a modal page. main: the set ("" — plain desks, else a session), its
+// schedule, desks 1–9 and, under the open one, its name, scheme and places.
+function rows(page, c, set, open) {
+  var out = [{ type: "head" }]
+  if (page === "settings") {
+    ["foreignWindow", "collapse", "collapseInSession"].forEach(function(k) { out.push({ type: "choice", key: k }) })
+    ;["sequentialLaunch", "schedule"].forEach(function(k) { out.push({ type: "switch", key: k }) })
+    c.singleInstance.forEach(function(r, i) { out.push({ type: "rule", index: i }) })
+    out.push({ type: "addRule" })
+    return out
+  }
+  out.push({ type: "set" })
+  var ds = set && c.sessions[set] ? c.sessions[set].workspaces : c.workspaces
+  if (set) out.push({ type: "schedule" })
+  for (var ws = 1; ws <= 9; ws++) {
+    out.push({ type: "desk", ws: ws })
+    if (ws !== open) continue
+    out.push({ type: "name", ws: ws }, { type: "scheme", ws: ws })
+    var n = PLACES[ds[String(ws)] ? ds[String(ws)].scheme : "single"]
+    for (var i = 0; i < n; i++) out.push({ type: "place", ws: ws, slot: i })
+  }
+  return out
+}
+
+// The value next to `value` in `list`, dx steps away, round the list.
+function step(list, value, dx) {
+  var i = Math.max(0, list.indexOf(value))
+  return list[((i + dx) % list.length + list.length) % list.length]
+}
+
+function validTime(t) { return /^([01]\d|2[0-3]):[0-5]\d$/.test(String(t)) }
+
+// Why `name` can't get schedule `s` ({days, from, to}): "" when it can.
+// Overnight ranges (to <= from) are not supported.
+function scheduleError(sessions, name, s) {
+  if (!validTime(s.from) || !validTime(s.to)) return "time"
+  if (minutes(s.to) <= minutes(s.from)) return "order"
+  var all = {}
+  Object.keys(sessions).forEach(function(n) { all[n] = { schedule: n === name ? s : sessions[n].schedule } })
+  var hit = overlaps(all).filter(function(p) { return p.indexOf(name) >= 0 })[0]
+  return hit ? "overlap:" + (hit[0] === name ? hit[1] : hit[0]) : ""
+}

@@ -6,6 +6,7 @@ import qs.Commons
 import qs.Ui
 import "Model.js" as Model
 import "I18n.js" as I18n
+import "." as Local
 
 // predmaxim.workspaces on the bar: [session ▾] then the desks as the stock widget
 // draws them, with names ("2 Firefox", ≤ 50 chars). Session click — the list of
@@ -220,5 +221,12 @@ Panel {
         }
       }
     }
+  }
+
+  // The settings modal and the session switch confirmation.
+  Local.Panel {
+    host: root
+    service: root.service
+    screen: root.QsWindow.window ? root.QsWindow.window.screen : null
   }
 }
