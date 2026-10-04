@@ -97,12 +97,17 @@ assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "q", ws: 
 assert.deepStrictEqual(M.freeDesks(fd.sessions.A.workspaces, [{ class: "x", ws: 10 }], 2, 9), [10, 11])
 assert.deepStrictEqual(M.fitSlots([{ class: "a" }, null, { class: "x" }], 2), [{ class: "a" }])
 assert.deepStrictEqual(M.fitSlots([null, { class: "b" }], 4), [null, { class: "b" }])
-// applying an edit of the desks in force
+// applying an edit of the desks in force: only the edited place
 const ap = M.normalize({ activeSession: "S", sessions: { S: { workspaces: {
   "1": { scheme: "left-right", slots: [null, { app: "foot.desktop", class: "foot" }] }, "2": { slots: [{ app: "fx.desktop", class: "fx" }] } } } } })
-assert.deepStrictEqual(M.applyPlan(ap, "S", [{ address: "a", class: "fx", ws: 5 }, { address: "b", class: "x", ws: 1 }]),
-  { launch: [{ ws: "1", slot: 2, app: "foot.desktop", class: "foot" }], move: [{ addr: "a", ws: 2 }] }, "no stranger moves, no close")
-assert.deepStrictEqual(M.applyPlan(M.normalize({ workspaces: { "3": { slots: [{ app: "f", class: "f" }] } } }), "", []).launch, [{ ws: "3", slot: 1, app: "f", class: "f" }])
+const wins = [{ address: "a", class: "fx", ws: 5 }, { address: "b", class: "x", ws: 1 }]
+assert.deepStrictEqual(M.applyPlan(ap, "S", wins, 1, 2), { launch: [{ ws: "1", slot: 2, app: "foot.desktop", class: "foot" }], move: [] })
+assert.deepStrictEqual(M.applyPlan(ap, "S", wins, 2, 1), { launch: [], move: [{ addr: "a", ws: 2 }] })
+assert.deepStrictEqual(M.applyPlan(ap, "S", wins, 1, 1), { launch: [], move: [] }, "cleared place: nothing")
+assert.deepStrictEqual(M.applyPlan(M.normalize({ workspaces: { "3": { slots: [{ app: "f", class: "f" }] } } }), "", [], 3, 1).launch, [{ ws: "3", slot: 1, app: "f", class: "f" }])
+assert.strictEqual(M.renameSession({ sessions: { A: {} } }, "A", "toString", "").raw.sessions.toString !== undefined, true)
+assert.strictEqual(M.renameSession({ sessions: { A: {} } }, "constructor", "B", "").error, "missing")
+assert.strictEqual(M.appNameOf("foo", [{ id: "foo.desktop", name: "", startupClass: "" }]), "Foo")
 // app names
 assert.strictEqual(M.prettyClass("org.omarchy.agent"), "Agent"); assert.strictEqual(M.prettyClass("chrome-www.youtube.com__-Default"), "Youtube")
 assert.strictEqual(M.prettyClass("foot"), "Foot")

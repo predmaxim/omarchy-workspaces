@@ -97,7 +97,7 @@ function appNameOf(cls, entries) {
   if (!web && last) tests.push(function(e) { return id(e).split(".").pop() === last || low(e.startupClass).split(".").pop() === last })
   for (var t = 0; t < tests.length; t++) {
     var hit = (entries || []).filter(tests[t])[0]
-    if (hit) return hit.name
+    if (hit && hit.name) return hit.name
   }
   return prettyClass(cls)
 }
@@ -107,10 +107,11 @@ function appNameOf(cls, entries) {
 function renameSession(raw, from, to, regularName) {
   to = String(to || "").trim()
   var ss = raw && raw.sessions || {}
-  if (!(from in ss)) return { error: "missing" }
+  var has = function(k) { return Object.prototype.hasOwnProperty.call(ss, k) }
+  if (!has(from)) return { error: "missing" }
   if (!to) return { error: "empty" }
   if (to.toLowerCase() === String(regularName || "").toLowerCase() || to === "Regular") return { error: "regular" }
-  if (to !== from && to in ss) return { error: "exists" }
+  if (to !== from && has(to)) return { error: "exists" }
   var next = JSON.parse(JSON.stringify(raw)), out = {}
   Object.keys(ss).forEach(function(k) { out[k === from ? to : k] = next.sessions[k] })
   next.sessions = out
@@ -207,13 +208,17 @@ function sessionPlan(c, from, to, windows) {
   return plan
 }
 
-// An edit of the desks in force: launch the missing apps, move open bound apps to
-// their desks; nothing closes, windows of other apps stay where they are.
-function applyPlan(c, active, windows) {
-  var p = sessionPlan(c, active, active, windows)
-  var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces), byAddr = {}
-  windows.forEach(function(w) { byAddr[w.address] = w })
-  return { launch: p.launch, move: p.move.filter(function(m) { return byAddr[m.addr] && cls[byAddr[m.addr].class] !== undefined }) }
+// A place of the desks in force was edited (ws, slot 1-based): launch its app if no
+// window of it is open, else move that window to the desk. Other places, other
+// windows and closed apps of other places are left alone.
+function applyPlan(c, active, windows, ws, slot) {
+  var ds = active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces
+  var d = ds[String(ws)], s = d && d.slots[slot - 1], out = { launch: [], move: [] }
+  if (!s) return out
+  var w = windows.filter(function(x) { return x.class === s.class })[0]
+  if (!w) out.launch.push({ ws: String(ws), slot: slot, app: s.app, class: s.class })
+  else if (String(w.ws) !== String(ws)) out.move.push({ addr: w.address, ws: Number(ws) })
+  return out
 }
 
 // ------------------------------------------------------------ the modal

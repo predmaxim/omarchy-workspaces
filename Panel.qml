@@ -117,8 +117,9 @@ Item {
     fn(next)
     root.service.save(next, then)
   }
-  // apply: a place changed — on the desks in force, launch/move at once.
+  // apply: the 1-based place that changed — on the desks in force, launch/move at once.
   function editDesk(fn, apply) {
+    var deskWs = root.deskWs
     var ws = String(root.deskWs)
     root.edit(function(next) {
       var ds = root.set ? (next.sessions[root.set].workspaces = next.sessions[root.set].workspaces || {})
@@ -127,7 +128,7 @@ Item {
     }, function(ok) {
       // The desks in force changed: apply now (launch, move), after the reload.
       var active = root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : ""
-      if (ok && apply && root.set === active) root.service.applyActive()
+      if (ok && apply && root.set === active) root.service.applyActive(deskWs, apply)
     })
   }
   function setOption(key, value) { root.edit(function(next) { next[key] = value }) }
@@ -141,7 +142,7 @@ Item {
     var app = root.apps.filter(function(a) { return a.value === id })[0]
     root.editDesk(function(d) {
       d.slots = Model.setSlot(d.slots, i, app ? { app: app.value, class: app.cls } : null, Model.PLACES[d.scheme] || 1)
-    }, true)
+    }, i + 1)
   }
   function addSession(name) {
     name = name.trim()

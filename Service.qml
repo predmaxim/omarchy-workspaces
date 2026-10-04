@@ -195,11 +195,15 @@ Item {
     if (!ok) { root.phase = ""; root.plan = null }
   }
 
-  // The desks in force were edited: launch missing apps, move open bound ones (no closing).
+  // A place of the desks in force was edited: launch its app or move its window (no closing).
   // Call after the save and reload, so the new rules place the windows.
-  function applyActive() {
+  // ws, slot: the edited place. A class launched < 15 s ago isn't launched again.
+  property var launchedAt: ({})
+  function applyActive(ws, slot) {
     if (root.phase !== "") return
-    var p = Model.applyPlan(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow())
+    var p = Model.applyPlan(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow(), ws, slot)
+    p.launch = p.launch.filter(function(l) { return !(Date.now() - (root.launchedAt[l.class] || 0) < 15000) })
+    p.launch.forEach(function(l) { root.launchedAt[l.class] = Date.now() })
     p.move.forEach(function(m) {
       root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
     })
