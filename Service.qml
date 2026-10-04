@@ -70,11 +70,13 @@ Item {
     // refreshToplevels is asynchronous: plan from fresh data after it settles.
     Hyprland.refreshToplevels()
     root.wanted = name
+    root.pendingPlan = null; root.plan = null
     planTimer.restart()
   }
   property string wanted: ""
   Timer { id: planTimer; interval: 300; onTriggered: root.planFor(root.wanted) }
   function planFor(name) {
+    if (root.phase !== "") return
     var now = root.windowsNow()
     var p = Model.sessionPlan(root.cfg, root.cfg.activeSession, name, now)
     root.plan = p
