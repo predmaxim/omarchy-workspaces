@@ -2,10 +2,12 @@ import QtQuick
 import Quickshell
 import qs.Commons
 import qs.Ui
+import "." as Local
 import "Model.js" as Model
 
-// One row of the Workspaces modal (Panel.qml): the label and, on the right, the
-// control for the row's type (Model.rows). `panel` is the modal: state and edits.
+// One row of a list page of the Workspaces modal (Panel.qml): the label and, on the
+// right, the control for the row's type (Model.rows); "places" — the label above and
+// the large scheme drawing under it. `panel` is the modal: state and edits.
 CursorSurface {
   id: row
   property var panel: null
@@ -26,9 +28,11 @@ CursorSurface {
   }
   required property var modelData
   required property int index
-  readonly property var desk: row.panel.desks[String(modelData.ws)] || null
+  readonly property var desk: row.panel.desk
+  readonly property bool wide: modelData.type === "places"
   visible: modelData.type !== "head"
-  implicitHeight: Math.max(Style.space(42), control.implicitHeight + Style.spacing.xs * 2, labels.implicitHeight + Style.spacing.xs * 2)
+  implicitHeight: wide ? labels.implicitHeight + control.implicitHeight + Style.spacing.xs * 3
+                : Math.max(Style.space(42), control.implicitHeight + Style.spacing.xs * 2, labels.implicitHeight + Style.spacing.xs * 2)
   foreground: row.panel.fg
   hasCursor: row.panel.cursor === index
 
@@ -42,29 +46,30 @@ CursorSurface {
     anchors.fill: parent
     hoverEnabled: true
     onPositionChanged: function(mouse) { if (row.panel.gate.moved(area, mouse)) row.panel.cursor = row.index }
-    onClicked: { row.panel.cursor = row.index; if (row.modelData.type === "desk") row.panel.activate(row.index) }
+    onClicked: row.panel.cursor = row.index
   }
 
   Column {
     id: labels
     anchors.left: parent.left
-    anchors.leftMargin: Style.spacing.rowPaddingX + (["name", "scheme", "place"].indexOf(row.modelData.type) >= 0 ? Style.space(24) : 0)
-    anchors.right: control.left
-    anchors.rightMargin: Style.space(8)
-    anchors.verticalCenter: parent.verticalCenter
+    anchors.leftMargin: Style.spacing.rowPaddingX
+    anchors.right: row.wide ? parent.right : control.left
+    anchors.rightMargin: row.wide ? Style.spacing.rowPaddingX : Style.space(8)
+    anchors.verticalCenter: row.wide ? undefined : parent.verticalCenter
+    anchors.top: row.wide ? parent.top : undefined
+    anchors.topMargin: Style.spacing.xs
     Text {
       width: parent.width
       text: row.panel.labelOf(row.modelData)
       color: row.panel.fg
       font.family: row.panel.font
       font.pixelSize: Style.font.body
-      font.bold: row.modelData.type === "desk"
       elide: Text.ElideRight
     }
     Text {
       visible: text !== ""
       width: parent.width
-      text: row.modelData.type === "to" ? row.panel.scheduleError : row.modelData.type === "set" ? row.panel.setHint : ""
+      text: row.modelData.type === "to" ? row.panel.scheduleError : row.modelData.type === "deleteSession" ? row.panel.setHint : ""
       color: Color.urgent
       font.family: row.panel.font
       font.pixelSize: Style.font.caption
@@ -76,53 +81,15 @@ CursorSurface {
     id: control
     anchors.right: parent.right
     anchors.rightMargin: Style.spacing.rowPaddingX
-    anchors.verticalCenter: parent.verticalCenter
-    sourceComponent: ({ set: setControl, days: daysControl, from: timeControl, to: timeControl, desk: deskControl, name: nameControl, scheme: schemeControl,
-                        place: placeControl, choice: choiceControl, switch: switchControl, rule: ruleControl, addRule: addRuleControl })[row.modelData.type] || null
+    anchors.verticalCenter: row.wide ? undefined : parent.verticalCenter
+    anchors.top: row.wide ? labels.bottom : undefined
+    anchors.topMargin: Style.spacing.xs
+    anchors.left: row.wide ? parent.left : undefined
+    anchors.leftMargin: Style.spacing.rowPaddingX
+    sourceComponent: ({ days: daysControl, from: timeControl, to: timeControl, name: nameControl, scheme: schemeControl,
+                        places: placesControl, deleteSession: deleteControl, choice: choiceControl, switch: switchControl,
+                        rule: ruleControl, addRule: addRuleControl })[row.modelData.type] || null
 
-    Component {
-      id: setControl
-      Row {
-        spacing: Style.space(6)
-        function press() { if (row.panel.adding) nameField.forceActiveFocus(); else setDropdown.open() }
-        Dropdown {
-          id: setDropdown
-          visible: !row.panel.adding
-          width: Style.space(200)
-          showLabel: false
-          options: row.panel.sets.map(function(n) { return { value: n, label: n || row.panel.tr("Regular") } })
-          value: row.panel.set
-          foreground: row.panel.fg
-          fontFamily: row.panel.font
-          hasCursor: row.hasCursor && row.panel.setCol === 0
-          onChanged: function(v) { row.panel.set = v }
-          onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { row.panel.focusKeys() })
-        }
-        Field {
-          id: nameField
-          visible: row.panel.adding
-          width: Style.space(200)
-          placeholderText: row.panel.tr("Session name")
-          onVisibleChanged: if (visible) forceActiveFocus()
-          onAccepted: { row.panel.addSession(text); text = "" }
-        }
-        IconButton {
-          anchors.verticalCenter: parent.verticalCenter
-          hasCursor: row.hasCursor && row.panel.setCol === 1
-          iconText: "󰐕"
-          tooltipText: row.panel.tr("New session")
-          onClicked: row.panel.adding = !row.panel.adding
-        }
-        IconButton {
-          anchors.verticalCenter: parent.verticalCenter
-          visible: row.panel.set !== "" && !row.panel.adding
-          hasCursor: row.hasCursor && row.panel.setCol === 2
-          iconText: "󰩺"
-          tooltipText: row.panel.tr("Delete session")
-          onClicked: row.panel.askDelete()
-        }
-      }
-    }
     Component {
       id: daysControl
       Row {
@@ -158,29 +125,6 @@ CursorSurface {
       }
     }
     Component {
-      id: deskControl
-      Row {
-        spacing: Style.space(8)
-        Text {
-          anchors.verticalCenter: parent.verticalCenter
-          width: Math.min(implicitWidth, row.width * 0.5)
-          text: row.panel.deskApps(row.modelData.ws)
-          color: row.panel.dim
-          font.family: row.panel.font
-          font.pixelSize: Style.font.body
-          elide: Text.ElideRight
-        }
-        Text {
-          visible: row.desk !== null
-          anchors.verticalCenter: parent.verticalCenter
-          text: row.desk ? row.panel.schemeGlyphs[row.desk.scheme] : ""
-          color: row.panel.dim
-          font.family: row.panel.font
-          font.pixelSize: Style.font.title
-        }
-      }
-    }
-    Component {
       id: nameControl
       Row {
         spacing: Style.space(6)
@@ -191,7 +135,7 @@ CursorSurface {
           width: Style.space(160)
           maximumLength: 50
           text: row.desk && row.desk.name.text || ""
-          onEditingFinished: if (text !== (row.desk && row.desk.name.text || "")) row.panel.setNameText(row.modelData.ws, text)
+          onEditingFinished: if (text !== (row.desk && row.desk.name.text || "")) row.panel.setNameText(text)
         }
         ButtonGroup {
           anchors.verticalCenter: parent.verticalCenter
@@ -200,38 +144,89 @@ CursorSurface {
           focusable: false
           foreground: row.panel.fg
           fontFamily: row.panel.font
-          onChanged: function(v) { row.panel.setNameMode(row.modelData.ws, v) }
+          onChanged: function(v) { row.panel.setNameMode(v) }
         }
       }
     }
     Component {
       id: schemeControl
-      ButtonGroup {
-        options: Model.SCHEMES.map(function(s) { return { value: s, label: row.panel.schemeGlyphs[s], tooltip: row.panel.schemeNames[s] } })
-        value: row.desk ? row.desk.scheme : "single"
-        fontSize: Style.font.subtitle * 1.5
-        focusable: false
-        foreground: row.panel.fg
-        fontFamily: row.panel.font
-        onChanged: function(v) { row.panel.setScheme(row.modelData.ws, v) }
+      // The five schemes as drawings; the current one outlined.
+      Row {
+        spacing: Style.space(6)
+        Repeater {
+          model: Model.SCHEMES
+          Rectangle {
+            required property string modelData
+            width: Style.space(56)
+            height: Style.space(36)
+            radius: Style.space(4)
+            color: "transparent"
+            border.width: (row.desk ? row.desk.scheme : "single") === modelData ? Math.max(2, Style.space(2)) : 0
+            border.color: row.panel.fg
+            Local.Scheme {
+              anchors.fill: parent
+              anchors.margins: Style.space(4)
+              scheme: parent.modelData
+              labels: Model.geometry(parent.modelData).map(function() { return " " })
+              foreground: row.panel.fg
+            }
+            MouseArea {
+              id: pick
+              anchors.fill: parent
+              hoverEnabled: true
+              onClicked: row.panel.setScheme(parent.modelData)
+            }
+            PanelToolTip { visible: pick.containsMouse; text: row.panel.schemeNames[parent.modelData] }
+          }
+        }
       }
     }
     Component {
-      id: placeControl
-      SearchableDropdown {
-        readonly property var slot: row.desk ? row.desk.slots[row.modelData.slot] || null : null
-        function press() { open() }
-        width: Style.space(240)
-        showLabel: false
-        options: [{ value: "", label: row.panel.tr("Empty") }].concat(row.panel.apps)
-        value: slot ? slot.app || "" : ""
-        triggerLabel: slot && !row.panel.apps.some(function(a) { return a.value === slot.app }) ? slot.class : ""
-        placeholderText: row.panel.tr("Search…")
-        emptyText: row.panel.tr("No matches")
-        foreground: row.panel.fg
-        fontFamily: row.panel.font
-        onChanged: function(v) { row.panel.setPlace(row.modelData.ws, row.modelData.slot, v) }
-        onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { row.panel.focusKeys() })
+      id: placesControl
+      // The chosen scheme, large: a place per cell; Enter/click — the app list below.
+      Column {
+        spacing: Style.spacing.xs
+        function press() { picker.open() }
+        Local.Scheme {
+          width: parent.width
+          height: Style.space(180)
+          scheme: row.desk ? row.desk.scheme : "single"
+          labels: row.panel.appNames(row.desk)
+          subs: Model.geometry(scheme).map(function(g, i) { return row.panel.tr("place %1", i + 1) })
+          emptyText: "+"
+          cursor: row.hasCursor ? row.panel.place : -1
+          interactive: true
+          fontSize: Style.font.body
+          foreground: row.panel.fg
+          fontFamily: row.panel.font
+          onPicked: function(i) { row.panel.cursor = row.index; row.panel.place = i; picker.open() }
+        }
+        SearchableDropdown {
+          id: picker
+          readonly property var slot: row.desk ? row.desk.slots[row.panel.place] || null : null
+          width: parent.width
+          showLabel: false
+          options: [{ value: "", label: row.panel.tr("Empty") }].concat(row.panel.apps)
+          value: slot ? slot.app || "" : ""
+          triggerLabel: slot && !row.panel.apps.some(function(a) { return a.value === slot.app }) ? slot.class : ""
+          placeholderText: row.panel.tr("Search…")
+          emptyText: row.panel.tr("No matches")
+          foreground: row.panel.fg
+          fontFamily: row.panel.font
+          onChanged: function(v) {
+            row.panel.setPlace(row.panel.place, v)
+            value = Qt.binding(function() { return picker.slot ? picker.slot.app || "" : "" })
+          }
+          onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { row.panel.focusKeys() })
+        }
+      }
+    }
+    Component {
+      id: deleteControl
+      IconButton {
+        iconText: "󰩺"
+        tooltipText: row.panel.tr("Delete session")
+        onClicked: row.panel.askDelete()
       }
     }
     Component {

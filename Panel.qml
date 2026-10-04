@@ -9,11 +9,12 @@ import "Model.js" as Model
 import "I18n.js" as I18n
 
 // The «Workspaces» modal (BarWidget.qml holds it; its Panel gives opened/open/close
-// and the IPC `omarchy-shell predmaxim.workspaces-panel toggle`). Pages: main (the
-// set — plain desks or a session —, its schedule, desks 1–9, the open desk's name,
-// scheme and places), settings behind the gear, and the session switch
-// confirmation, which opens by itself while the service waits for an answer.
-// Rows come from Model.rows; ↑/↓ rows, ←/→ value, Enter open/press, Esc back.
+// and the IPC `omarchy-shell predmaxim.workspaces-panel toggle`). Pages: main (desks
+// 1–9 as tiles of the set — plain desks or a session — picked in the header, and the
+// session's schedule row; Tiles.qml), desk (name, scheme, apps by place), schedule,
+// settings behind the gear, and the session switch confirmation, which opens by
+// itself while the service waits for an answer. List pages' rows come from
+// Model.rows (PanelRow.qml); ↑/↓ rows, ←/→ value, Enter open/press, Esc back.
 Item {
   id: root
   property var host: null
@@ -27,21 +28,24 @@ Item {
   readonly property color dim: Qt.darker(fg, 1.4)
   readonly property string font: Style.font.family
 
-  property string page: "main"
+  property string page: "main"     // main | desk | schedule | settings
   property string set: ""          // "" — plain desks, else a session
-  property int expanded: 0         // the open desk
-  property int cursor: 1
-  property bool adding: false      // the new session's name field in the set row
+  property int deskWs: 1           // the desk page's desk
+  property var pos: 0              // main page cursor (Model.mainMove)
+  property int cursor: 1           // list pages: the row
+  property int place: 0            // desk page: the place under the cursor
+  property bool adding: false      // the new session's name field in the header
   property bool confirming: false
   property string switchTo: ""
   property var draft: ({ days: [], from: "", to: "" })
   property string scheduleError: ""
-  property string setHint: ""      // under the set row: why the session can't be deleted
-  property int setCol: 0           // the set row's control under the cursor (Model.setCol)
+  property string setHint: ""      // why the session can't be deleted
   property int dayCursor: 0        // the day under the cursor in the days row
+  property var setPicker: null     // the header's set Dropdown
 
-  readonly property var rows: confirming ? [] : Model.rows(page, cfg, set, expanded)
+  readonly property var rows: confirming || page === "main" ? [] : Model.rows(page, cfg)
   readonly property var desks: set && cfg.sessions[set] ? cfg.sessions[set].workspaces : cfg.workspaces
+  readonly property var desk: desks[String(deskWs)] || null
   readonly property var sets: [""].concat(Object.keys(cfg.sessions))
   readonly property var apps: DesktopEntries.applications.values
     .map(function(e) { return { label: e.name, value: e.id, cls: e.startupClass || e.id.replace(/\.desktop$/, "") } })
@@ -51,11 +55,10 @@ Item {
                                          free: tr("Only free"), all: tr("All"), off: tr("Don't collapse"),
                                          number: tr("Number"), dynamic: tr("By window"), static: tr("Custom"),
                                          focus: tr("Focus"), ask: tr("Ask"), replace: tr("Replace") })
-  readonly property var rowLabels: ({ set: tr("Set"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
+  readonly property var rowLabels: ({ places: tr("Apps by place"), deleteSession: tr("Delete session"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
                                       addRule: tr("One app window"), foreignWindow: tr("Foreign window on a laid-out desk"),
                                       collapse: tr("Collapsing without a session"), collapseInSession: tr("Collapsing in a session"),
                                       sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login") })
-  readonly property var schemeGlyphs: ({ single: "□", "left-right": "◫", "top-bottom": "⊟", "main-left": "◧", grid: "⊞" })
   readonly property var schemeNames: ({ single: tr("One window"), "left-right": tr("Left and right"), "top-bottom": tr("Top and bottom"),
                                         "main-left": tr("Main on the left"), grid: tr("Grid") })
   readonly property var days: [tr("Mon"), tr("Tue"), tr("Wed"), tr("Thu"), tr("Fri"), tr("Sat"), tr("Sun")]
@@ -72,14 +75,15 @@ Item {
   onOpenedChanged: {
     if (opened) {
       if (!confirming) {
-        page = "main"; expanded = 0; cursor = 1; adding = false
+        page = "main"; pos = 0; cursor = 1; adding = false
         set = cfg.sessions[cfg.activeSession] ? cfg.activeSession : ""
         loadDraft()
       }
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     } else if (confirming && service && service.phase === "") service.cancelSwitch()
   }
-  onSetChanged: { loadDraft(); setHint = ""; setCol = 0 }
+  onSetChanged: { loadDraft(); setHint = "" }
+  onPageChanged: flick.contentY = 0
   onSetsChanged: if (sets.indexOf(set) < 0) set = ""
   onRowsChanged: if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
   onCursorChanged: {
@@ -112,7 +116,8 @@ Item {
     fn(next)
     root.service.save(next)
   }
-  function editDesk(ws, fn) {
+  function editDesk(fn) {
+    var ws = String(root.deskWs)
     root.edit(function(next) {
       var ds = root.set ? (next.sessions[root.set].workspaces = next.sessions[root.set].workspaces || {})
                         : (next.workspaces = next.workspaces || {})
@@ -120,15 +125,15 @@ Item {
     })
   }
   function setOption(key, value) { root.edit(function(next) { next[key] = value }) }
-  function setScheme(ws, v) { root.editDesk(ws, function(d) { d.scheme = v; d.slots = Model.setSlot(d.slots, 0, (d.slots || [])[0] || null, Model.PLACES[v]) }) }
-  function setNameMode(ws, v) {
-    root.editDesk(ws, function(d) { d.name = v === "static" ? { mode: v, text: d.name && d.name.text || "" } : { mode: v } })
+  function setScheme(v) { root.editDesk(function(d) { d.scheme = v; d.slots = Model.setSlot(d.slots, 0, (d.slots || [])[0] || null, Model.PLACES[v]) }) }
+  function setNameMode(v) {
+    root.editDesk(function(d) { d.name = v === "static" ? { mode: v, text: d.name && d.name.text || "" } : { mode: v } })
   }
-  function setNameText(ws, t) { root.editDesk(ws, function(d) { d.name = { mode: "static", text: t } }) }
+  function setNameText(t) { root.editDesk(function(d) { d.name = { mode: "static", text: t } }) }
   // Places keep their numbers: an empty one stays null.
-  function setPlace(ws, i, id) {
+  function setPlace(i, id) {
     var app = root.apps.filter(function(a) { return a.value === id })[0]
-    root.editDesk(ws, function(d) {
+    root.editDesk(function(d) {
       d.slots = Model.setSlot(d.slots, i, app ? { app: app.value, class: app.cls } : null, Model.PLACES[d.scheme] || 1)
     })
   }
@@ -144,6 +149,7 @@ Item {
     var name = root.set
     root.edit(function(next) { delete next.sessions[name]; if (next.activeSession === name) next.activeSession = "" })
     root.set = ""
+    root.showPage("main")
   }
   function addRule(cls) {
     cls = cls.trim()
@@ -190,63 +196,96 @@ Item {
     root.cursor = Math.max(0, Math.min(root.rows.length - 1, root.cursor + dy))
     pointerGate.reset()
   }
-  function showPage(p) { root.page = p; root.cursor = 1; root.expanded = 0 }
+  function showPage(p) { root.page = p; root.cursor = 1; root.place = 0 }
+  function openDesk(ws) { root.deskWs = ws; root.showPage("desk") }
   function back() {
     if (root.confirming) { if (root.service.phase === "launching") root.host.close(); else root.service.cancelSwitch() }
-    else if (root.page === "settings") root.showPage("main")
-    else if (root.expanded) { root.cursor = root.rows.map(function(r) { return r.ws }).indexOf(root.expanded); root.expanded = 0 }
+    else if (root.page === "desk") { root.pos = root.deskWs - 1; root.showPage("main") }
+    else if (root.page === "schedule") { root.pos = "sched"; root.showPage("main") }
+    else if (root.page === "settings") { root.pos = "head1"; root.showPage("main") }
     else root.host.close()
   }
+  function arrow(dx, dy) {
+    if (root.page === "main") { root.pos = Model.mainMove(root.pos, dx, dy, root.set !== ""); pointerGate.reset(); return }
+    var r = root.rows[root.cursor]
+    if (r && r.type === "places") {
+      var n = Model.placeMove(root.desk ? root.desk.scheme : "single", root.place, dx, dy)
+      if (n >= 0) root.place = n
+      else if (dy < 0) root.move(-1)
+    } else if (dy) root.move(dy)
+    else root.change(root.cursor, dx)
+  }
   function change(i, dx) {
-    var r = root.rows[i]
+    var r = root.rows[i], d = root.desk
     if (!r) return
-    var desk = root.desks[String(r.ws)]
-    if (r.type === "set") { if (!root.adding) root.setCol = Model.setCol(root.setCol, dx, root.set) }
-    else if (r.type === "days") root.dayCursor = Math.max(0, Math.min(6, root.dayCursor + dx))
-    else if (r.type === "name") root.setNameMode(r.ws, Model.step(Model.NAME_MODES, desk ? desk.name.mode || "number" : "number", dx))
-    else if (r.type === "scheme") root.setScheme(r.ws, Model.step(Model.SCHEMES, desk ? desk.scheme : "single", dx))
+    if (r.type === "days") root.dayCursor = Math.max(0, Math.min(6, root.dayCursor + dx))
+    else if (r.type === "name") root.setNameMode(Model.step(Model.NAME_MODES, d ? d.name.mode || "number" : "number", dx))
+    else if (r.type === "scheme") root.setScheme(Model.step(Model.SCHEMES, d ? d.scheme : "single", dx))
     else if (r.type === "choice") root.setOption(r.key, Model.step(Model.CHOICES[r.key], root.cfg[r.key], dx))
     else if (r.type === "switch") root.setOption(r.key, !root.cfg[r.key])
     else if (r.type === "rule") root.setRule(r.index, Model.step(Model.ACTIONS, root.cfg.singleInstance[r.index].action, dx))
   }
-  function activate(i) {
-    var r = root.rows[i]
+  function activate() {
     if (root.confirming) { if (root.service.pendingPlan && root.service.phase === "") root.service.confirmSwitch(); return }
+    if (root.page === "main") {
+      if (typeof root.pos === "number") root.openDesk(root.pos + 1)
+      else if (root.pos === "sched") root.showPage("schedule")
+      else if (root.pos === "head1") root.showPage("settings")
+      else if (root.adding) root.focusNameField()
+      else if (root.setPicker) root.setPicker.open()
+      return
+    }
+    var i = root.cursor, r = root.rows[i]
     if (!r) return
-    if (r.type === "head") root.showPage(root.page === "settings" ? "main" : "settings")
-    else if (r.type === "desk") root.expanded = root.expanded === r.ws ? 0 : r.ws
-    else if (r.type === "set" && root.setCol === 1 && !root.adding) root.adding = true
-    else if (r.type === "set" && root.setCol === 2 && !root.adding) root.askDelete()
+    if (r.type === "head") root.back()
+    else if (r.type === "deleteSession") root.askDelete()
     else if (r.type === "days") root.toggleDay(root.dayCursor + 1)
-    else if (["set", "from", "to", "place", "addRule"].indexOf(r.type) >= 0) root.pressRow(i)
-    else if (r.type === "name" && root.desks[String(r.ws)] && root.desks[String(r.ws)].name.mode === "static") root.pressRow(i)
+    else if (["from", "to", "places", "addRule"].indexOf(r.type) >= 0) root.pressRow(i)
+    else if (r.type === "name" && root.desk && root.desk.name.mode === "static") root.pressRow(i)
     else root.change(i, 1)
   }
-  function remove(i) {
-    var r = root.rows[i]
-    if (r && r.type === "set" && root.set) root.askDelete()
+  function remove() {
+    var r = root.page === "main" ? null : root.rows[root.cursor]
+    if (r && r.type === "places") root.setPlace(root.place, "")
     else if (r && r.type === "rule") root.removeRule(r.index)
+  }
+  signal focusNameField()
+  // The set switcher: a session, or "+ New session" → the name field.
+  readonly property string newSet: "\u0001new"
+  function pickSet(v) {
+    if (v === root.newSet) root.adding = true
+    else root.set = v
   }
 
   // ------------------------------------------------------------ texts
 
   function labelOf(r) {
-    if (r.type === "desk") {
-      var d = root.desks[String(r.ws)]
-      var name = !d ? "" : d.name.mode === "static" ? d.name.text || "" : d.name.mode === "dynamic" ? root.tr("By window") : ""
-      return r.ws + "   " + Model.trimName(name)
-    }
-    if (r.type === "place") return root.tr("Place %1", r.slot + 1)
     if (r.type === "rule") { var x = root.cfg.singleInstance[r.index]; return x.name || x.class || x.match || "" }
     return root.rowLabels[r.type === "switch" && r.key === "schedule" ? "schedule_" : r.key || r.type] || ""
   }
-  function deskApps(ws) {
-    var d = root.desks[String(ws)]
-    if (!d) return ""
-    return d.slots.filter(function(s) { return s }).map(function(s) {
-      var a = root.apps.filter(function(x) { return x.value === s.app || x.cls === s.class })[0]
-      return a ? a.label : s.class
-    }).join(", ")
+  // App names of a desk's places, "" for an empty place.
+  function appNames(d) {
+    var out = []
+    for (var i = 0; i < Model.PLACES[d ? d.scheme : "single"]; i++) {
+      var s = d && d.slots[i]
+      var a = s ? root.apps.filter(function(x) { return x.value === s.app || x.cls === s.class })[0] : null
+      out.push(!s ? "" : a ? a.label : s.class)
+    }
+    return out
+  }
+  function scheduleText() {
+    var s = root.set && root.cfg.sessions[root.set] ? root.cfg.sessions[root.set].schedule : null
+    return root.tr("Schedule: %1", s && s.days && s.days.length ? Model.dayRanges(s.days, root.days) + " " + s.from + "–" + s.to : root.tr("none"))
+  }
+  function title() {
+    if (root.confirming) return root.switchTo ? root.tr("Switch to %1?", root.switchTo) : root.tr("Turn off the session?")
+    if (root.page === "settings") return root.tr("Settings")
+    if (root.page === "schedule") return root.tr("Schedule")
+    if (root.page === "desk") {
+      var n = root.desk && root.desk.name.mode === "static" ? Model.trimName(root.desk.name.text || "") : ""
+      return root.tr("Desk %1", root.deskWs) + (n ? " · " + n : "")
+    }
+    return root.tr("Workspaces")
   }
   function options(list) { return list.map(function(v) { return { value: v, label: root.choiceLabels[v] } }) }
 
@@ -304,14 +343,10 @@ Item {
           anchors.fill: parent
           focus: true
           blocked: confirmDelete.opened || root.typing
-          onMoveRequested: function(dx, dy) {
-            if (root.confirming) return
-            if (dy) root.move(dy)
-            else if (dx) root.change(root.cursor, dx)
-          }
-          onActivateRequested: root.activate(root.cursor)
+          onMoveRequested: function(dx, dy) { if (!root.confirming) root.arrow(dx, dy) }
+          onActivateRequested: root.activate()
           onCloseRequested: root.back()
-          onDeleteRequested: root.remove(root.cursor)
+          onDeleteRequested: root.remove()
 
           PointerMoveGate { id: pointerGate; referenceItem: list }
 
@@ -322,9 +357,8 @@ Item {
 
             PanelHero {
               width: head.width
-              title: root.confirming ? (root.switchTo ? root.tr("Switch to %1?", root.switchTo) : root.tr("Turn off the session?"))
-                   : root.page === "settings" ? root.tr("Settings") : root.tr("Workspaces")
-              meta: root.confirming ? "" : root.cfg.activeSession || root.tr("No session")
+              title: root.title()
+              meta: root.confirming ? "" : root.page === "schedule" ? root.set : root.cfg.activeSession || root.tr("No session")
               foreground: root.fg
               fontFamily: root.font
               iconComponent: Text {
@@ -333,13 +367,47 @@ Item {
                 font.family: root.font
                 font.pixelSize: Style.font.display
               }
-              trailingControl: IconButton {
-                readonly property bool back: root.page === "settings"
+              // Main page: the set switcher and the gear; other pages: Back.
+              trailingControl: Row {
+                spacing: Style.space(6)
                 visible: !root.confirming
-                iconText: back ? "󰁍" : "󰒓"
-                tooltipText: back ? root.tr("Back") : root.tr("Settings")
-                hasCursor: root.cursor === 0
-                onClicked: { root.cursor = 0; root.activate(0) }
+                Dropdown {
+                  id: setDropdown
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.page === "main" && !root.adding
+                  width: Style.space(180)
+                  showLabel: false
+                  options: root.sets.map(function(n) { return { value: n, label: n || root.tr("Regular") } })
+                    .concat([{ value: root.newSet, label: "+ " + root.tr("New session") }])
+                  value: root.set
+                  foreground: root.fg
+                  fontFamily: root.font
+                  hasCursor: root.pos === "head0"
+                  onChanged: function(v) { root.pickSet(v); value = Qt.binding(function() { return root.set }) }
+                  onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { root.focusKeys() })
+                  Component.onCompleted: root.setPicker = setDropdown
+                }
+                TextField {
+                  id: nameField
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.page === "main" && root.adding
+                  width: Style.space(180)
+                  placeholderText: root.tr("Session name")
+                  foreground: root.fg
+                  font.family: root.font
+                  font.pixelSize: Style.font.body
+                  onVisibleChanged: if (visible) forceActiveFocus()
+                  onAccepted: { root.addSession(text); text = "" }
+                  Connections { target: root; function onFocusNameField() { nameField.forceActiveFocus() } }
+                }
+                IconButton {
+                  readonly property bool back: root.page !== "main"
+                  anchors.verticalCenter: parent.verticalCenter
+                  iconText: back ? "󰁍" : "󰒓"
+                  tooltipText: back ? root.tr("Back") : root.tr("Settings")
+                  hasCursor: back ? root.cursor === 0 : root.pos === "head1"
+                  onClicked: { if (back) root.back(); else root.showPage("settings") }
+                }
               }
             }
 
@@ -377,6 +445,12 @@ Item {
               width: flick.width
               spacing: Style.spacing.xs
 
+              Local.Tiles {
+                visible: root.page === "main"
+                width: list.width
+                panel: root
+              }
+
               Repeater {
                 id: rep
                 model: root.rows
@@ -389,67 +463,13 @@ Item {
             }
           }
 
-          Column {
+          Local.ConfirmPage {
             id: confirmPage
+            panel: root
             visible: root.confirming
             anchors.top: head.bottom
             anchors.left: parent.left
             anchors.right: parent.right
-            spacing: Style.spacing.xs
-            readonly property var plan: root.service ? root.service.pendingPlan : null
-            readonly property string phase: root.service ? root.service.phase : ""
-            // The first window of the plan still open (toplevels for the binding).
-            readonly property string closingNow: {
-              if (phase !== "closing" || !plan) return ""
-              void Hyprland.toplevels.values
-              var up = root.service.windowsNow().map(function(w) { return w.address })
-              var left = plan.close.filter(function(w) { return up.indexOf(w.address) >= 0 })
-              return left.length ? left[0].title || left[0].address : "…"
-            }
-
-            Repeater {
-              model: confirmPage.plan ? confirmPage.plan.close : []
-              Text {
-                required property var modelData
-                width: confirmPage.width
-                text: "• " + (modelData.title || modelData.address)
-                color: root.fg
-                font.family: root.font
-                font.pixelSize: Style.font.body
-                elide: Text.ElideRight
-              }
-            }
-            Text {
-              visible: text !== ""
-              text: confirmPage.phase === "udisks" ? root.tr("Waiting for the flash drive…")
-                  : confirmPage.phase === "closing" ? root.tr("Closing: %1", confirmPage.closingNow)
-                  : confirmPage.phase === "launching" ? root.tr("Launching…") : ""
-              color: root.dim
-              font.family: root.font
-              font.pixelSize: Style.font.body
-            }
-            Item { width: 1; height: Style.space(8) }
-            Row {
-              anchors.right: parent.right
-              spacing: Style.space(10)
-              Button {
-                visible: confirmPage.phase !== "launching"
-                bordered: true
-                text: root.tr("Cancel")
-                foreground: root.fg
-                fontFamily: root.font
-                onClicked: root.service.cancelSwitch()
-              }
-              Button {
-                visible: confirmPage.plan !== null && confirmPage.phase === ""
-                bordered: true
-                hasCursor: true
-                text: root.tr("Close and switch")
-                foreground: root.fg
-                fontFamily: root.font
-                onClicked: root.service.confirmSwitch()
-              }
-            }
           }
         }
       }

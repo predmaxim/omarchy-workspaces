@@ -83,7 +83,7 @@ assert.deepStrictEqual(plan2.move, [{ addr: "x", ws: 4 }], "stranger skips occup
 // translations: every tr("...") in QML and Model.js has a Russian line, no unused ones
 const I = new Function(fs.readFileSync(__dirname + "/I18n.js", "utf8").replace(".pragma library", "") + "; return { TABLES }")()
 const used = new Set()
-for (const f of ["Model.js", "Service.qml", "BarWidget.qml", "Panel.qml", "PanelRow.qml"]) {
+for (const f of ["Model.js", "Service.qml", "BarWidget.qml", "Panel.qml", "PanelRow.qml", "Tiles.qml", "Scheme.qml", "ConfirmPage.qml"]) {
   if (!fs.existsSync(__dirname + "/" + f)) continue
   for (const m of fs.readFileSync(__dirname + "/" + f, "utf8").matchAll(/tr\("((?:[^"\\]|\\.)*)"/g)) {
     used.add(m[1]); assert.ok(m[1] in I.TABLES.ru, f + ": no ru for " + m[1])
