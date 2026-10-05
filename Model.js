@@ -90,16 +90,44 @@ function prettyClass(cls) {
 // by startupClass, by id without ".desktop", then by the class's last dot-segment
 // (not for web apps — their segments are domains); else prettyClass.
 function appNameOf(cls, entries) {
+  var hit = entryOf(cls, entries)
+  return hit && hit.name ? hit.name : prettyClass(cls)
+}
+// The desktop entry of a window class (same matching as appNameOf), null if none;
+// exact — only by startupClass or id, no guess by the last segment.
+function entryOf(cls, entries, exact) {
   var lc = String(cls || "").toLowerCase(), last = lc.split(".").pop(), web = /__/.test(lc)
   var low = function(s) { return String(s || "").toLowerCase() }
   var id = function(e) { return low(e.id).replace(/\.desktop$/, "") }
   var tests = [function(e) { return low(e.startupClass) === lc }, function(e) { return id(e) === lc }]
-  if (!web && last) tests.push(function(e) { return id(e).split(".").pop() === last || low(e.startupClass).split(".").pop() === last })
+  if (!exact && !web && last) tests.push(function(e) { return id(e).split(".").pop() === last || low(e.startupClass).split(".").pop() === last })
   for (var t = 0; t < tests.length; t++) {
-    var hit = (entries || []).filter(tests[t])[0]
-    if (hit && hit.name) return hit.name
+    var hit = (entries || []).filter(function(e) { return e.name && tests[t](e) })[0]
+    if (hit) return hit
   }
-  return prettyClass(cls)
+  return null
+}
+
+// Open windows as raw desks of a set: desks 1–9, one place per window in their order,
+// the smallest scheme that holds them. Not kept (`lost`, their classes): windows with
+// no desktop entry of exactly their class (a guess would launch another app), a second window of a class (a set launches a class once), windows
+// beyond the grid's 4 places or off desks 1–9.
+var SCHEME_FOR = [null, "single", "left-right", "main-left", "grid"]
+function captureDesks(windows, entries) {
+  var byWs = {}, seen = {}, lost = []
+  ;(windows || []).forEach(function(w) {
+    var e = w.class ? entryOf(w.class, entries, true) : null
+    if (!e || seen[w.class] || !(w.ws >= 1 && w.ws <= 9)) return lost.push(w.class || w.title || "?")
+    seen[w.class] = true
+    ;(byWs[w.ws] = byWs[w.ws] || []).push({ app: String(e.id).replace(/\.desktop$/, ""), class: w.class })
+  })
+  var desks = {}
+  Object.keys(byWs).forEach(function(ws) {
+    var slots = byWs[ws], n = Math.min(slots.length, 4)
+    slots.slice(4).forEach(function(s) { lost.push(s.class) })
+    desks[ws] = { scheme: SCHEME_FOR[n], slots: slots.slice(0, n), name: { mode: "number" } }
+  })
+  return { desks: desks, lost: lost }
 }
 
 // Rename session `from` to `to` in raw config: same key order, the active one too.
@@ -272,17 +300,21 @@ function rows(page, c) {
 }
 
 // The main page's cursor: a tile 0–8, "sched" (the schedule row, sessions only) or
-// "head0"/"head1"/"head2" (set switcher, launch, gear). Arrows over the 3×3 grid; ↑ from the top
-// row — the schedule row, then the header.
-function mainMove(pos, dx, dy, sched) {
+// "head0"…"head<heads-1>" (the header's controls, left to right) or "save" (the capture
+// page's button under the tiles, `foot`). Arrows over the 3×3 grid; ↑ from the top
+// row — the schedule row, then the header; ↓ from the bottom row — "save".
+function mainMove(pos, dx, dy, sched, heads, foot) {
+  heads = heads || 3
+  if (pos === "save") return dy < 0 ? 7 : pos
   if (typeof pos === "number") {
     var r = Math.floor(pos / 3), col = pos % 3
     if (dy < 0 && r === 0) return sched ? "sched" : "head0"
+    if (dy > 0 && r === 2 && foot) return "save"
     return Math.max(0, Math.min(2, r + dy)) * 3 + Math.max(0, Math.min(2, col + dx))
   }
   if (pos === "sched") return dy < 0 ? "head0" : dy > 0 ? 0 : pos
   if (dy > 0) return sched ? "sched" : 0
-  return dx ? "head" + Math.max(0, Math.min(2, Number(pos.slice(4)) + dx)) : pos
+  return dx ? "head" + Math.max(0, Math.min(heads - 1, Number(pos.slice(4)) + dx)) : pos
 }
 
 // Places of a scheme as {x, y, w, h} fractions of the desk, in place order

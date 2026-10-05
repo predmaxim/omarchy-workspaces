@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -173,4 +173,23 @@ const swd = M.normalize({ workspaces: { "5": { slots: [{ class: "a" }] }, "7": {
   sessions: { S: { workspaces: { "2": { slots: [{ class: "s" }] } } } } })
 assert.deepStrictEqual(M.swapMoves(swd, "", [{ address: "1", ws: 1, class: "a" }, { address: "2", ws: 1, class: "c" }], 1, 5), [{ addr: "1", ws: 5 }])
 assert.deepStrictEqual(M.swapMoves(swd, "S", [{ address: "3", ws: 4, class: "s" }, { address: "4", ws: 4, class: "a" }], 2, 4), [{ addr: "3", ws: 2 }])
+// capture: schemes by count, a class once, no desktop entry, off desks 1–9, over 4 places
+const ce = [{ id: "firefox.desktop", name: "Firefox", startupClass: "firefox" }, { id: "a.desktop", name: "A", startupClass: "a" },
+  { id: "b.desktop", name: "B", startupClass: "b" }, { id: "c.desktop", name: "C", startupClass: "c" }, { id: "d.desktop", name: "D", startupClass: "d" },
+  { id: "e.desktop", name: "E", startupClass: "e" }]
+const cap = M.captureDesks([{ class: "firefox", ws: 1 }, { class: "firefox", ws: 2 }, { class: "zzz", ws: 2 },
+  { class: "a", ws: 3 }, { class: "b", ws: 3 }, { class: "c", ws: 3 }, { class: "d", ws: 3 }, { class: "e", ws: 3 }, { class: "a", ws: -98 }], ce)
+assert.deepStrictEqual(cap.desks["1"], { scheme: "single", slots: [{ app: "firefox", class: "firefox" }], name: { mode: "number" } })
+assert.strictEqual(cap.desks["2"], undefined)
+assert.strictEqual(cap.desks["3"].scheme, "grid"); assert.deepStrictEqual(cap.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d"])
+assert.deepStrictEqual(cap.lost.sort(), ["a", "e", "firefox", "zzz"])
+assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }], ce).desks["4"].scheme, "left-right")
+assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }, { class: "c", ws: 4 }], ce).desks["4"].scheme, "main-left")
+// the capture page: 2 header controls, "save" under the tiles; the main page: 4
+assert.strictEqual(M.mainMove(7, 0, 1, false, 2, true), "save"); assert.strictEqual(M.mainMove("save", 0, -1, false, 2, true), 7)
+assert.strictEqual(M.mainMove("head0", 1, 0, false, 2, true), "head1"); assert.strictEqual(M.mainMove("head1", 1, 0, false, 2, true), "head1")
+assert.strictEqual(M.mainMove("head2", 1, 0, true, 4), "head3")
+// no guess by the last segment: org.omarchy.agent is not an "…agent" app
+assert.deepStrictEqual(M.captureDesks([{ class: "org.omarchy.agent", ws: 1 }], [{ id: "ideco.desktop", name: "Ideco", startupClass: "com.ideco.agent" }]),
+  { desks: {}, lost: ["org.omarchy.agent"] })
 console.log("ok")

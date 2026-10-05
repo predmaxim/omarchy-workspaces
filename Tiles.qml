@@ -16,7 +16,7 @@ Column {
   property int dragTo: -1
 
   CursorSurface {
-    visible: root.panel.set !== ""
+    visible: root.panel.set !== "" && !root.panel.capture
     width: root.width
     implicitHeight: Style.space(42)
     foreground: root.panel.fg

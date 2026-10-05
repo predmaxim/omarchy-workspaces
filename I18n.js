@@ -5,6 +5,15 @@
 var TABLES = {
   ru: {
     "Workspaces": "Рабочие столы",
+    "Open windows": "Открытые окна",
+    "Now on the desks": "Сейчас на столах",
+    "Take the open windows": "Взять открытые окна",
+    "Save to": "Сохранить в",
+    "Not saved: %1": "Не сохранятся: %1",
+    "Save the open windows as a new session": "Сохранить открытые окна в новую сессию",
+    "Save the open windows to %1": "Сохранить открытые окна в «%1»",
+    "Rewrite %1 from scratch with the open windows?": "Вы точно хотите переписать «%1» с нуля открытыми окнами?",
+    "Rewrite": "Переписать",
     "config.json is broken — session %1 not started": "config.json сломан — сессия «%1» не запущена",
     "config.json is broken — the scheduled session was not checked": "config.json сломан — сессия по расписанию не проверялась",
     "config.json is broken, edits are off: %1": "config.json сломан, правка отключена: %1",

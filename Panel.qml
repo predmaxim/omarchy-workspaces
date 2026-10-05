@@ -43,9 +43,12 @@ Item {
   property string renameHint: ""   // why the new name doesn't fit
   property int dayCursor: 0        // the day under the cursor in the days row
   property var setPicker: null     // the header's set Dropdown
+  property var capture: null       // the open windows as a draft set: {desks, lost} (Model.captureDesks)
+  property string target: ""       // where the draft goes: a set or newSet
+  property string captureHint: ""  // why the draft can't go under that name
 
   readonly property var rows: confirming || page === "main" ? [] : Model.rows(page, cfg)
-  readonly property var desks: set && cfg.sessions[set] ? cfg.sessions[set].workspaces : cfg.workspaces
+  readonly property var desks: capture ? capture.desks : set && cfg.sessions[set] ? cfg.sessions[set].workspaces : cfg.workspaces
   readonly property var desk: desks[String(deskWs)] || null
   readonly property var sets: [""].concat(Object.keys(cfg.sessions))
   readonly property var apps: DesktopEntries.applications.values
@@ -77,7 +80,7 @@ Item {
   onOpenedChanged: {
     if (opened) {
       if (!confirming) {
-        page = "main"; pos = 0; cursor = 1; adding = false
+        page = "main"; pos = 0; cursor = 1; adding = false; capture = null
         set = cfg.sessions[cfg.activeSession] ? cfg.activeSession : ""
         loadDraft()
       }
@@ -124,6 +127,13 @@ Item {
   function editDesk(fn, apply) {
     var deskWs = root.deskWs
     var ws = String(root.deskWs)
+    // The draft of open windows lives in memory until it's saved.
+    if (root.capture) {
+      var c = JSON.parse(JSON.stringify(root.capture))
+      fn(c.desks[ws] = c.desks[ws] || { scheme: "single", slots: [], name: { mode: "number" } })
+      root.capture = c
+      return
+    }
     root.edit(function(next) {
       var ds = root.set ? (next.sessions[root.set].workspaces = next.sessions[root.set].workspaces || {})
                         : (next.workspaces = next.workspaces || {})
@@ -138,6 +148,10 @@ Item {
   // bound windows follow after the reload.
   function swapDesks(a, b) {
     if (a === b || !root.service || root.service.loadError !== "") return
+    if (root.capture) {
+      root.capture = { desks: Model.swapDesks({ workspaces: root.capture.desks }, "", a, b).workspaces, lost: root.capture.lost }
+      return
+    }
     var set = root.set
     root.service.save(Model.swapDesks(root.service.raw, set, a, b), function(ok) {
       if (ok && set === root.activeSet) root.service.moveSwapped(a, b)
@@ -181,6 +195,48 @@ Item {
     if (!root.service) return
     if (root.set === root.activeSet) root.service.launchActive()
     else root.service.requestSession(root.set)
+  }
+  // «Take the open windows»: a draft of the desks as they are now, saved only on «Save».
+  function startCapture() {
+    if (!root.service) return
+    Hyprland.refreshToplevels()
+    Qt.callLater(function() {
+      root.capture = Model.captureDesks(root.service.windowsNow(), DesktopEntries.applications.values)
+      root.target = root.set
+      root.captureHint = ""
+      root.pos = 0
+    })
+  }
+  // A new session asks its name; an existing set is rewritten only after a yes.
+  function askSave() {
+    if (root.target === root.newSet) { root.adding = true; root.focusNameField() }
+    else confirmOverwrite.opened = true
+  }
+  // The draft becomes set `name` ("" — the regular desks) from scratch (its schedule stays)
+  // and the set in force: its windows are already open, nothing to launch.
+  function saveCapture(name, isNew) {
+    name = name.trim()
+    if (isNew) {
+      root.adding = false
+      keyCatcher.forceActiveFocus()
+      if (!name) return
+      if (root.cfg.sessions[name] || name.toLowerCase() === root.tr("Regular").toLowerCase() || name === "Regular") {
+        root.captureHint = root.tr("A session with this name exists"); return
+      }
+    }
+    var desks = root.capture.desks
+    root.edit(function(next) {
+      if (!name) next.workspaces = desks
+      else {
+        next.sessions = next.sessions || {}
+        var old = next.sessions[name]
+        next.sessions[name] = { workspaces: desks, schedule: old && old.schedule || null }
+      }
+      next.activeSession = name
+    })
+    root.capture = null
+    root.set = name
+    root.pos = "head0"
   }
   function deleteSession() {
     var name = root.set
@@ -240,11 +296,15 @@ Item {
     if (root.confirming) { if (root.service.phase === "launching") root.host.close(); else root.service.cancelSwitch() }
     else if (root.page === "desk") { root.pos = root.deskWs - 1; root.showPage("main") }
     else if (root.page === "schedule") { root.pos = "sched"; root.showPage("main") }
-    else if (root.page === "settings") { root.pos = "head2"; root.showPage("main") }
+    else if (root.page === "settings") { root.pos = "head3"; root.showPage("main") }
+    else if (root.capture) { root.capture = null; root.pos = "head2" }
     else root.host.close()
   }
   function arrow(dx, dy) {
-    if (root.page === "main") { root.pos = Model.mainMove(root.pos, dx, dy, root.set !== ""); pointerGate.reset(); return }
+    if (root.page === "main") {
+      root.pos = Model.mainMove(root.pos, dx, dy, root.set !== "" && !root.capture, root.capture ? 2 : 4, !!root.capture)
+      pointerGate.reset(); return
+    }
     var r = root.rows[root.cursor]
     if (r && r.type === "places") {
       var n = Model.placeMove(root.desk ? root.desk.scheme : "single", root.place, dx, dy)
@@ -268,8 +328,11 @@ Item {
     if (root.page === "main") {
       if (typeof root.pos === "number") root.openDesk(root.pos + 1)
       else if (root.pos === "sched") root.showPage("schedule")
+      else if (root.pos === "save") root.askSave()
+      else if (root.capture && root.pos === "head1") root.back()
       else if (root.pos === "head1") root.launchSet()
-      else if (root.pos === "head2") root.showPage("settings")
+      else if (root.pos === "head2") root.startCapture()
+      else if (root.pos === "head3") root.showPage("settings")
       else if (root.adding) root.focusNameField()
       else if (root.setPicker) root.setPicker.open()
       return
@@ -292,7 +355,8 @@ Item {
   // The set switcher: a session, or "+ New session" → the name field.
   readonly property string newSet: "\u0001new"
   function pickSet(v) {
-    if (v === root.newSet) root.adding = true
+    if (root.capture) { root.target = v; root.captureHint = "" }
+    else if (v === root.newSet) root.adding = true
     else root.set = v
   }
 
@@ -318,6 +382,7 @@ Item {
   }
   function title() {
     if (root.confirming) return root.switchTo ? root.tr("Switch to %1?", root.switchTo) : root.tr("Turn off the session?")
+    if (root.capture && root.page === "main") return root.tr("Open windows")
     if (root.page === "settings") return root.tr("Settings")
     if (root.page === "schedule") return root.tr("Schedule")
     if (root.page === "desk") {
@@ -374,6 +439,7 @@ Item {
         anchors.leftMargin: card.contentLeftInset
         Keys.onPressed: function(event) {
           if (confirmDelete.opened) event.accepted = confirmDelete.handleKey(event)
+          else if (confirmOverwrite.opened) event.accepted = confirmOverwrite.handleKey(event)
           else if (event.key === Qt.Key_Escape) { root.adding = false; keyCatcher.forceActiveFocus(); event.accepted = true }
         }
 
@@ -381,7 +447,7 @@ Item {
           id: keyCatcher
           anchors.fill: parent
           focus: true
-          blocked: confirmDelete.opened || root.typing
+          blocked: confirmDelete.opened || confirmOverwrite.opened || root.typing
           onMoveRequested: function(dx, dy) { if (!root.confirming) root.arrow(dx, dy) }
           onActivateRequested: root.activate()
           onCloseRequested: root.back()
@@ -414,7 +480,7 @@ Item {
             PanelHero {
               width: head.width
               title: root.title()
-              meta: root.confirming ? "" : root.page === "schedule" ? root.set : root.cfg.activeSession || root.tr("No session")
+              meta: root.confirming ? "" : root.capture && root.page === "main" ? root.tr("Now on the desks") : root.page === "schedule" ? root.set : root.cfg.activeSession || root.tr("No session")
               foreground: root.fg
               fontFamily: root.font
               iconComponent: Text {
@@ -427,6 +493,14 @@ Item {
               trailingControl: Row {
                 spacing: Style.space(6)
                 visible: !root.confirming
+                Text {
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.capture !== null && root.page === "main" && !root.adding
+                  text: root.tr("Save to")
+                  color: root.dim
+                  font.family: root.font
+                  font.pixelSize: Style.font.body
+                }
                 Dropdown {
                   id: setDropdown
                   anchors.verticalCenter: parent.verticalCenter
@@ -435,11 +509,11 @@ Item {
                   showLabel: false
                   options: root.sets.map(function(n) { return { value: n, label: n || root.tr("Regular") } })
                     .concat([{ value: root.newSet, label: "+ " + root.tr("New session") }])
-                  value: root.set
+                  value: root.capture ? root.target : root.set
                   foreground: root.fg
                   fontFamily: root.font
                   hasCursor: root.pos === "head0"
-                  onChanged: function(v) { root.pickSet(v); value = Qt.binding(function() { return root.set }) }
+                  onChanged: function(v) { root.pickSet(v); value = Qt.binding(function() { return root.capture ? root.target : root.set }) }
                   // After "+ New session" the name field keeps the keys.
                   onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { if (root.adding) root.focusNameField(); else root.focusKeys() })
                   Component.onCompleted: root.setPicker = setDropdown
@@ -454,12 +528,12 @@ Item {
                   font.family: root.font
                   font.pixelSize: Style.font.body
                   onVisibleChanged: if (visible) forceActiveFocus()
-                  onAccepted: { root.addSession(text); text = "" }
+                  onAccepted: { if (root.capture) root.saveCapture(text, true); else root.addSession(text); text = "" }
                   Connections { target: root; function onFocusNameField() { nameField.forceActiveFocus() } }
                 }
                 IconButton {
                   anchors.verticalCenter: parent.verticalCenter
-                  visible: root.page === "main"
+                  visible: root.page === "main" && !root.capture
                   iconText: "󰐊"
                   tooltipText: root.set === root.activeSet ? root.tr("Launch the apps") : root.tr("Switch to this set")
                   hasCursor: root.pos === "head1"
@@ -467,11 +541,19 @@ Item {
                   onClicked: { root.pos = "head1"; root.launchSet() }
                 }
                 IconButton {
-                  readonly property bool back: root.page !== "main"
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.page === "main" && !root.capture
+                  iconText: "󰄀"
+                  tooltipText: root.tr("Take the open windows")
+                  hasCursor: root.pos === "head2"
+                  onClicked: { root.pos = "head2"; root.startCapture() }
+                }
+                IconButton {
+                  readonly property bool back: root.page !== "main" || root.capture !== null
                   anchors.verticalCenter: parent.verticalCenter
                   iconText: back ? "󰁍" : "󰒓"
                   tooltipText: back ? root.tr("Back") : root.tr("Settings")
-                  hasCursor: back ? root.cursor === 0 : root.pos === "head2"
+                  hasCursor: root.page !== "main" ? root.cursor === 0 : root.pos === (root.capture ? "head1" : "head3")
                   onClicked: { if (back) root.back(); else root.showPage("settings") }
                 }
               }
@@ -517,6 +599,30 @@ Item {
                 panel: root
               }
 
+              // The draft's footer: what won't be kept, why the name doesn't fit, and Save
+              // with the target spelled out — it saves the open windows, not the set above.
+              Text {
+                visible: root.page === "main" && root.capture !== null && (root.capture.lost.length > 0 || root.captureHint !== "")
+                width: list.width
+                topPadding: Style.space(6)
+                text: root.captureHint || (root.capture ? root.tr("Not saved: %1", root.capture.lost.map(Model.prettyClass).join(", ")) : "")
+                color: root.captureHint ? Color.urgent : root.dim
+                font.family: root.font
+                font.pixelSize: Style.font.caption
+                wrapMode: Text.WordWrap
+              }
+              Button {
+                visible: root.page === "main" && root.capture !== null
+                width: list.width
+                bordered: true
+                text: root.target === root.newSet ? root.tr("Save the open windows as a new session")
+                  : root.tr("Save the open windows to %1", root.target || root.tr("Regular"))
+                foreground: root.fg
+                fontFamily: root.font
+                hasCursor: root.pos === "save"
+                onClicked: { root.pos = "save"; root.askSave() }
+              }
+
               Repeater {
                 id: rep
                 model: root.rows
@@ -540,6 +646,18 @@ Item {
         }
       }
 
+      ConfirmDialog {
+        id: confirmOverwrite
+        anchors.fill: parent
+        z: 10
+        message: root.tr("Rewrite %1 from scratch with the open windows?", root.target || root.tr("Regular"))
+        cancelText: root.tr("Cancel")
+        confirmText: root.tr("Rewrite")
+        foreground: root.fg
+        fontFamily: root.font
+        onCanceled: { opened = false; keyCatcher.forceActiveFocus() }
+        onConfirmed: { opened = false; root.saveCapture(root.target, false); keyCatcher.forceActiveFocus() }
+      }
       ConfirmDialog {
         id: confirmDelete
         anchors.fill: parent
