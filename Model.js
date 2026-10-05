@@ -110,22 +110,23 @@ function entryOf(cls, entries, exact) {
 
 // Open windows as raw desks of a set: desks 1–9, one place per window in their order,
 // the smallest scheme that holds them. Not kept (`lost`, their classes): windows with
-// no desktop entry of exactly their class (a guess would launch another app), a second window of a class (a set launches a class once), windows
-// beyond the grid's 4 places or off desks 1–9.
+// no desktop entry of exactly their class (a guess would launch another app),
+// windows off desks 1–9. Every window of an app is kept, on the desk of its first one:
+// the engine binds a class to one desk. A desk may come out with more than 4 windows:
+// mergeDesks moves the rest.
 var SCHEME_FOR = [null, "single", "left-right", "main-left", "grid"]
 function captureDesks(windows, entries) {
-  var byWs = {}, seen = {}, lost = []
+  var byWs = {}, deskOf = {}, lost = []
   ;(windows || []).forEach(function(w) {
     var e = w.class ? entryOf(w.class, entries, true) : null
-    if (!e || seen[w.class] || !(w.ws >= 1 && w.ws <= 9)) return lost.push(w.class || w.title || "?")
-    seen[w.class] = true
-    ;(byWs[w.ws] = byWs[w.ws] || []).push({ app: String(e.id).replace(/\.desktop$/, ""), class: w.class })
+    if (!e || !(w.ws >= 1 && w.ws <= 9)) return lost.push(w.class || w.title || "?")
+    var ws = deskOf[w.class] = deskOf[w.class] || w.ws
+    ;(byWs[ws] = byWs[ws] || []).push({ app: String(e.id).replace(/\.desktop$/, ""), class: w.class })
   })
   var desks = {}
   Object.keys(byWs).forEach(function(ws) {
-    var slots = byWs[ws], n = Math.min(slots.length, 4)
-    slots.slice(4).forEach(function(s) { lost.push(s.class) })
-    desks[ws] = { scheme: SCHEME_FOR[n], slots: slots.slice(0, n), name: { mode: "number" } }
+    var slots = byWs[ws]
+    desks[ws] = { scheme: SCHEME_FOR[Math.min(slots.length, 4)], slots: slots, name: { mode: "number" } }
   })
   return { desks: desks, lost: lost }
 }
@@ -208,6 +209,7 @@ function sessionPlan(c, from, to, windows) {
   var nums = Object.keys(next).map(Number)
   var lastDesk = nums.length ? Math.max.apply(null, nums) : 0
   var plan = { close: [], move: [], launch: [] }, open = {}, moved = {}, occupied = Object.create(null)
+  // open[class]: windows of it open — that many of its places need no launch.
 
   // Track which desks currently hold windows
   windows.forEach(function(w) { occupied[String(w.ws)] = true })
@@ -215,7 +217,7 @@ function sessionPlan(c, from, to, windows) {
   var free = lastDesk + 1
   windows.forEach(function(w) {
     if (nextCls[w.class] !== undefined) {
-      open[w.class] = true
+      open[w.class] = (open[w.class] || 0) + 1
       moved[String(w.ws)] = true
       if (String(w.ws) !== nextCls[w.class]) plan.move.push({ addr: w.address, ws: Number(nextCls[w.class]) })
     } else if (prevCls[w.class] !== undefined) {
@@ -230,7 +232,7 @@ function sessionPlan(c, from, to, windows) {
   })
   Object.keys(next).sort(function(a, b) { return a - b }).forEach(function(ws) {
     next[ws].slots.forEach(function(s, i) {
-      if (s && !open[s.class]) plan.launch.push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
+      if (s && !(open[s.class]-- > 0)) plan.launch.push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
     })
   })
   return plan
@@ -281,23 +283,38 @@ function swapMoves(c, active, windows, a, b) {
   }).map(function(w) { return { addr: w.address, ws: Number(cls[w.class]) } })
 }
 
-// The draft for an existing set: its desks (`setDesks`, normalized) with the captured
-// windows (`captured`, captureDesks().desks) added — an app the set has stays where it
-// is; a new one takes a free place of its desk, the scheme grows to fit (up to the
-// grid); what doesn't fit goes to `lost` (classes).
+// The draft: a set's desks (`setDesks`, normalized; {} for a new set) with the captured
+// windows (`captured`, captureDesks().desks) added, counted by app: as many windows of
+// an app as the set has places for it stay where they are; more of an app the set has
+// join its desk; a new app takes a free place of its desk. The scheme grows to fit (up
+// to the grid); a new app that doesn't fit goes to the nearest empty desk, then the
+// next one; the rest — to `lost` (classes).
 function mergeDesks(setDesks, captured) {
-  var desks = JSON.parse(JSON.stringify(setDesks || {})), lost = [], have = classesOf(desks)
-  Object.keys(captured || {}).forEach(function(ws) {
+  var desks = JSON.parse(JSON.stringify(setDesks || {})), lost = [], over = [], have = classesOf(desks), left = {}
+  Object.keys(desks).forEach(function(ws) { desks[ws].slots.forEach(function(s) { if (s) left[s.class] = (left[s.class] || 0) + 1 }) })
+  var put = function(ws, s) {
+    var d = desks[ws] = desks[ws] || { scheme: "single", slots: [], name: { mode: "number" } }
+    var i = 0
+    while (d.slots[i]) i++
+    if (i >= 4) return false
+    while (i >= PLACES[d.scheme]) d.scheme = SCHEME_FOR[PLACES[d.scheme] + 1]
+    d.slots[i] = s
+    have[s.class] = ws
+    return true
+  }
+  Object.keys(captured || {}).sort(function(a, b) { return a - b }).forEach(function(ws) {
     captured[ws].slots.forEach(function(s) {
-      if (!s || have[s.class] !== undefined) return
-      var d = desks[ws] = desks[ws] || { scheme: "single", slots: [], name: { mode: "number" } }
-      var i = 0
-      while (d.slots[i]) i++
-      while (i >= PLACES[d.scheme] && d.scheme !== "grid") d.scheme = SCHEME_FOR[PLACES[d.scheme] + 1]
-      if (i >= PLACES[d.scheme]) return lost.push(s.class)
-      d.slots[i] = s
-      have[s.class] = ws
+      if (!s) return
+      if (left[s.class]) { left[s.class]--; return }
+      var known = have[s.class] !== undefined
+      if (!put(known ? have[s.class] : ws, s)) (known ? lost : over).push(known ? s.class : s)
     })
+  })
+  var empty = function(ws) { return !desks[ws] || !desks[ws].slots.some(function(x) { return x }) }
+  var free = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(String).filter(empty), at = 0
+  over.forEach(function(s) {
+    while (at < free.length && !put(free[at], s)) at++
+    if (at >= free.length) lost.push(s.class)
   })
   return { desks: desks, lost: lost }
 }

@@ -179,10 +179,14 @@ const ce = [{ id: "firefox.desktop", name: "Firefox", startupClass: "firefox" },
   { id: "e.desktop", name: "E", startupClass: "e" }]
 const cap = M.captureDesks([{ class: "firefox", ws: 1 }, { class: "firefox", ws: 2 }, { class: "zzz", ws: 2 },
   { class: "a", ws: 3 }, { class: "b", ws: 3 }, { class: "c", ws: 3 }, { class: "d", ws: 3 }, { class: "e", ws: 3 }, { class: "a", ws: -98 }], ce)
-assert.deepStrictEqual(cap.desks["1"], { scheme: "single", slots: [{ app: "firefox", class: "firefox" }], name: { mode: "number" } })
+// two windows of an app: both kept, on the desk of the first
+assert.deepStrictEqual(cap.desks["1"], { scheme: "left-right", slots: [{ app: "firefox", class: "firefox" }, { app: "firefox", class: "firefox" }], name: { mode: "number" } })
 assert.strictEqual(cap.desks["2"], undefined)
-assert.strictEqual(cap.desks["3"].scheme, "grid"); assert.deepStrictEqual(cap.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d"])
-assert.deepStrictEqual(cap.lost.sort(), ["a", "e", "firefox", "zzz"])
+assert.strictEqual(cap.desks["3"].scheme, "grid"); assert.deepStrictEqual(cap.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d", "e"])
+assert.deepStrictEqual(cap.lost.sort(), ["a", "zzz"])
+// a new set: the 5th window of desk 3 goes to the nearest empty desk (2)
+const capm = M.mergeDesks({}, cap.desks)
+assert.deepStrictEqual(capm.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d"]); assert.deepStrictEqual(capm.desks["2"].slots.map(s => s.class), ["e"])
 assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }], ce).desks["4"].scheme, "left-right")
 assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }, { class: "c", ws: 4 }], ce).desks["4"].scheme, "main-left")
 // the capture page: 2 header controls, "save" under the tiles; the main page: 4
@@ -196,6 +200,21 @@ assert.deepStrictEqual(M.captureDesks([{ class: "org.omarchy.agent", ws: 1 }], [
 const md = M.normalize({ workspaces: { "1": { slots: [{ app: "y", class: "y" }] }, "2": { scheme: "grid", slots: [{ class: "a" }, { class: "b" }, { class: "c" }, { class: "d" }] } } }).workspaces
 const mg = M.mergeDesks(md, { "1": { slots: [{ class: "n" }, { class: "a" }] }, "2": { slots: [{ class: "m" }] }, "3": { slots: [{ class: "k" }] } })
 assert.strictEqual(mg.desks["1"].scheme, "left-right"); assert.deepStrictEqual(mg.desks["1"].slots.map(x => x.class), ["y", "n"])
-assert.deepStrictEqual(mg.desks["3"].slots.map(x => x.class), ["k"]); assert.deepStrictEqual(mg.lost, ["m"])
+assert.deepStrictEqual(mg.desks["3"].slots.map(x => x.class), ["k"]); assert.deepStrictEqual(mg.desks["4"].slots.map(x => x.class), ["m"])
+assert.deepStrictEqual(mg.lost, [])
+// 4 + 4: the new four share one empty desk; no empty desk left — lost
+const full = {}; for (let i = 1; i <= 9; i++) full[i] = { slots: [{ class: "s" + i }] }
+const fm = M.mergeDesks(M.normalize({ workspaces: { "2": { scheme: "grid", slots: ["a", "b", "c", "d"].map(c => ({ class: c })) } } }).workspaces,
+  { "2": { slots: ["e", "f", "g", "h"].map(c => ({ class: c })) } })
+assert.deepStrictEqual(fm.desks["1"].slots.map(x => x.class), ["e", "f", "g", "h"]); assert.strictEqual(fm.desks["1"].scheme, "grid")
+assert.deepStrictEqual(M.mergeDesks(M.normalize({ workspaces: Object.assign({}, full, { "2": { scheme: "grid", slots: ["a", "b", "c", "d"].map(c => ({ class: c })) } }) }).workspaces,
+  { "2": { slots: [{ class: "e" }] } }).lost, ["e"])
 assert.strictEqual(md["1"].slots.length, 1)   // the input is untouched
+// by count: the set has one "y", two are open — one more joins its desk
+const mc = M.mergeDesks(md, { "3": { slots: [{ class: "y" }, { class: "y" }] } })
+assert.deepStrictEqual(mc.desks["1"].slots.map(x => x.class), ["y", "y"]); assert.strictEqual(mc.desks["3"], undefined)
+// launch: two places of a class, one window open — one launch
+const dup = M.normalize({ workspaces: { "1": { scheme: "left-right", slots: [{ app: "f", class: "f" }, { app: "f", class: "f" }] } } })
+assert.strictEqual(M.sessionPlan(dup, "", "", [{ address: "1", ws: 1, class: "f" }]).launch.length, 1)
+assert.strictEqual(M.sessionPlan(dup, "", "", []).launch.length, 2)
 console.log("ok")

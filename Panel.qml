@@ -217,7 +217,7 @@ Item {
   // go when the target changes.
   function draftFor(taken) {
     var t = root.target === root.newSet ? null : root.target ? (root.cfg.sessions[root.target] || {}).workspaces : root.cfg.workspaces
-    var m = t && Object.keys(Model.classesOf(t)).length ? Model.mergeDesks(t, taken.desks) : { desks: taken.desks, lost: [] }
+    var m = Model.mergeDesks(t && Object.keys(Model.classesOf(t)).length ? t : {}, taken.desks)
     root.capture = { desks: m.desks, lost: taken.lost.concat(m.lost), taken: taken }
     root.captureHint = ""
   }
