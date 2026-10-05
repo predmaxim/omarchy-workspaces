@@ -108,11 +108,32 @@ Column {
             height: parent.height - num.height - parent.spacing
             scheme: tile.desk ? tile.desk.scheme : "single"
             labels: tile.free ? [] : root.panel.appNames(tile.desk)
-            marks: root.panel.newMarks(tile.desk)
+            marks: root.panel.newMarks(tile.desk, tile.ws)
             emptyText: tile.free ? root.panel.tr("free") : "+"
             foreground: root.panel.fg
             fontFamily: root.panel.font
           }
+        }
+
+        // Clear the desk (Delete on the tile does the same); shown on hover or under the cursor.
+        Text {
+          anchors.top: parent.top
+          anchors.right: parent.right
+          anchors.margins: Style.space(6)
+          visible: !tile.free && (area.containsMouse || clear.containsMouse || tile.hasCursor)
+          text: "󰅖"
+          color: clear.containsMouse ? Color.accent : root.panel.dim
+          font.family: root.panel.font
+          font.pixelSize: Style.font.body
+          MouseArea {
+            id: clear
+            anchors.fill: parent
+            anchors.margins: -Style.space(4)
+            hoverEnabled: true
+            cursorShape: Qt.PointingHandCursor
+            onClicked: root.panel.askClearDesk(tile.ws)
+          }
+          PanelToolTip { visible: clear.containsMouse; text: root.panel.tr("Clear the desk") }
         }
       }
     }

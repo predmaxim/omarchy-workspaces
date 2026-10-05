@@ -3,7 +3,7 @@ local json = require("predmaxim_workspaces.json")
 local M = {}
 
 M.PATH = os.getenv("HOME") .. "/.config/predmaxim.workspaces/config.json"
-M.PLACES = { single = 1, ["left-right"] = 2, ["top-bottom"] = 2, ["main-left"] = 3, grid = 4 }
+M.PLACES = { single = 1, ["left-right"] = 2, ["top-bottom"] = 2, ["main-left"] = 3, grid = 4, ["main-right"] = 4 }
 local CHOICES = { foreignWindow = { tile = 1, float = 1, next = 1 },
                   collapse = { free = 1, all = 1, off = 1 }, collapseInSession = { free = 1, all = 1, off = 1 } }
 M.DEFAULTS = { foreignWindow = "tile", collapse = "free", collapseInSession = "free",

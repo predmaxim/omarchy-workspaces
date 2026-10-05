@@ -2,8 +2,8 @@
 // predmaxim.workspaces: everything the shell side needs without QML — the config
 // (same defaults as hypr/config.lua), desk labels, the login schedule, session plans.
 
-var PLACES = { single: 1, "left-right": 2, "top-bottom": 2, "main-left": 3, grid: 4 }
-var SCHEMES = ["single", "left-right", "top-bottom", "main-left", "grid"]
+var PLACES = { single: 1, "left-right": 2, "top-bottom": 2, "main-left": 3, grid: 4, "main-right": 4 }
+var SCHEMES = ["single", "left-right", "top-bottom", "main-left", "grid", "main-right"]
 var CHOICES = { foreignWindow: ["tile", "float", "next"], collapse: ["free", "all", "off"], collapseInSession: ["free", "all", "off"] }
 var DEFAULTS = { foreignWindow: "tile", collapse: "free", collapseInSession: "free", sequentialLaunch: false, schedule: true, hideNoSession: true }
 
@@ -100,6 +100,9 @@ function entryOf(cls, entries, exact) {
   var low = function(s) { return String(s || "").toLowerCase() }
   var id = function(e) { return low(e.id).replace(/\.desktop$/, "") }
   var tests = [function(e) { return low(e.startupClass) === lc }, function(e) { return id(e) === lc }]
+  // A web app ("chrome-<host>__<path>-Default") by the host of its omarchy-launch-webapp URL.
+  var host = (lc.match(/^(?:chrome|brave|chromium|msedge)-(.+?)__/) || [])[1]
+  if (host) tests.push(function(e) { var u = low(e.execString).match(/omarchy-launch-webapp\s+"?https?:\/\/([^/"\s]+)/); return !!u && u[1] === host })
   if (!exact && !web && last) tests.push(function(e) { return id(e).split(".").pop() === last || low(e.startupClass).split(".").pop() === last })
   for (var t = 0; t < tests.length; t++) {
     var hit = (entries || []).filter(function(e) { return e.name && tests[t](e) })[0]
@@ -109,26 +112,52 @@ function entryOf(cls, entries, exact) {
 }
 
 // Open windows as raw desks of a set: desks 1–9, one place per window in their order,
-// the smallest scheme that holds them. Not kept (`lost`, their classes): windows with
+// the scheme they are tiled in (schemeOf), else the smallest one that holds them. Not kept (`lost`, their classes): windows with
 // no desktop entry of exactly their class (a guess would launch another app),
-// windows off desks 1–9. Every window of an app is kept, on the desk of its first one:
-// the engine binds a class to one desk. A desk may come out with more than 4 windows:
+// windows off desks 1–9. Every window stays on its own desk (an app may be on several).
+// A desk may come out with more than 4 windows:
 // mergeDesks moves the rest.
 var SCHEME_FOR = [null, "single", "left-right", "main-left", "grid"]
 function captureDesks(windows, entries) {
-  var byWs = {}, deskOf = {}, lost = []
+  var byWs = {}, lost = []
   ;(windows || []).forEach(function(w) {
     var e = w.class ? entryOf(w.class, entries, true) : null
     if (!e || !(w.ws >= 1 && w.ws <= 9)) return lost.push(w.class || w.title || "?")
-    var ws = deskOf[w.class] = deskOf[w.class] || w.ws
-    ;(byWs[ws] = byWs[ws] || []).push({ app: String(e.id).replace(/\.desktop$/, ""), class: w.class })
+    var ws = w.ws
+    ;(byWs[ws] = byWs[ws] || []).push({ app: String(e.id).replace(/\.desktop$/, ""), class: w.class, w: w })
   })
   var desks = {}
   Object.keys(byWs).forEach(function(ws) {
-    var slots = byWs[ws]
-    desks[ws] = { scheme: SCHEME_FOR[Math.min(slots.length, 4)], slots: slots, name: { mode: "number" } }
+    var slots = byWs[ws], seen = schemeOf(slots.map(function(s) { return s.w }), Number(ws))
+    if (seen) slots = seen.order.map(function(j) { return slots[j] })
+    slots = slots.map(function(s) { return { app: s.app, class: s.class } })
+    desks[ws] = { scheme: seen ? seen.scheme : SCHEME_FOR[Math.min(slots.length, 4)], slots: slots, name: { mode: "number" } }
   })
   return { desks: desks, lost: lost }
+}
+
+// The scheme windows [{ws, at: [x, y], size: [w, h], floating}] are tiled in on desk `ws`:
+// {scheme, order} — order[i] is the window in place i — or null (a window floats, is
+// elsewhere, no scheme of that many places has each window's centre in its own place).
+function schemeOf(wins, ws) {
+  if (wins.length < 2 || wins.some(function(w) { return w.ws !== ws || w.floating || !w.at || !w.size })) return null
+  var x0 = Math.min.apply(null, wins.map(function(w) { return w.at[0] })), y0 = Math.min.apply(null, wins.map(function(w) { return w.at[1] }))
+  var W = Math.max.apply(null, wins.map(function(w) { return w.at[0] + w.size[0] })) - x0
+  var H = Math.max.apply(null, wins.map(function(w) { return w.at[1] + w.size[1] })) - y0
+  var mid = wins.map(function(w) { return { x: (w.at[0] + w.size[0] / 2 - x0) / W, y: (w.at[1] + w.size[1] / 2 - y0) / H } })
+  for (var s = 0; s < SCHEMES.length; s++) {
+    if (PLACES[SCHEMES[s]] !== wins.length) continue
+    var order = []
+    var ok = geometry(SCHEMES[s]).every(function(p) {
+      for (var j = 0; j < mid.length; j++) {
+        var m = mid[j]
+        if (order.indexOf(j) < 0 && m.x > p.x && m.x < p.x + p.w && m.y > p.y && m.y < p.y + p.h) return order.push(j)
+      }
+      return false
+    })
+    if (ok) return { scheme: SCHEMES[s], order: order }
+  }
+  return null
 }
 
 // Rename session `from` to `to` in raw config: same key order, the active one too.
@@ -179,6 +208,71 @@ function classesOf(ds) {
   return out
 }
 
+// Where the open windows of a set's apps belong. An app may have places on several
+// desks: each place takes one window — first a window already on its desk, then the
+// others in order; a window beyond its app's places goes to the app's first desk.
+// at[address]: the desk (string) of each window of the set's apps; missing: the empty
+// places [{ws, slot, app, class}] by desk, then place.
+function assign(ds, windows) {
+  var free = {}, first = {}, at = {}, rest = [], missing = []
+  Object.keys(ds).sort(function(a, b) { return a - b }).forEach(function(ws) {
+    ds[ws].slots.forEach(function(s, i) {
+      if (!s) return
+      ;(free[s.class] = free[s.class] || []).push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
+      if (first[s.class] === undefined) first[s.class] = ws
+    })
+  })
+  windows.forEach(function(w) {
+    var f = free[w.class]
+    if (!f) return
+    var k = f.map(function(p) { return p.ws }).indexOf(String(w.ws))
+    if (k >= 0) at[w.address] = f.splice(k, 1)[0].ws
+    else rest.push(w)
+  })
+  rest.forEach(function(w) { var f = free[w.class]; at[w.address] = f.length ? f.shift().ws : first[w.class] })
+  Object.keys(ds).sort(function(a, b) { return a - b }).forEach(function(ws) {
+    Object.keys(free).forEach(function(c) { free[c].forEach(function(p) { if (p.ws === ws) missing.push(p) }) })
+  })
+  missing.sort(function(a, b) { return a.ws - b.ws || a.slot - b.slot })
+  return { at: at, missing: missing }
+}
+
+// The single-instance rule (cfg.singleInstance, as hypr/single.lua reads it) a class
+// falls under: its index, -1 for none. Windows of one rule are one app.
+// ponytail: Lua patterns translated for the classes rules use (%x escapes, %w/%d/%a/%s,
+// lazy -); a pattern beyond that matches nothing here.
+function luaPattern(p) {
+  var out = "", set = false, cls = { w: "A-Za-z0-9", d: "0-9", a: "A-Za-z", s: "\\s", l: "a-z", u: "A-Z" }
+  for (var i = 0; i < p.length; i++) {
+    var ch = p[i]
+    if (ch === "%" && i + 1 < p.length) { var n = p[++i]; out += cls[n] ? (set ? cls[n] : "[" + cls[n] + "]") : "\\" + n }
+    else if (ch === "[") { set = true; out += ch }
+    else if (ch === "]") { set = false; out += ch }
+    else if (ch === "-" && !set) out += "*?"
+    else out += ch
+  }
+  try { return new RegExp(out) } catch (e) { return /(?!)/ }
+}
+function singleGroup(rules, cls) {
+  for (var i = 0; i < (rules || []).length; i++) {
+    var r = rules[i]
+    if (r && (r.class !== undefined ? r.class === cls : typeof r.match === "string" && luaPattern(r.match).test(cls))) return i
+  }
+  return -1
+}
+// Launches without a second window of a single-instance app: its rule closes or asks
+// about the second one, so only one per rule starts, none when one is open.
+function singleOnly(c, windows, launch) {
+  var seen = {}
+  windows.forEach(function(w) { var g = singleGroup(c.singleInstance, w.class); if (g >= 0) seen[g] = true })
+  return launch.filter(function(l) {
+    var g = singleGroup(c.singleInstance, l.class)
+    if (g < 0) return true
+    if (seen[g]) return false
+    return (seen[g] = true)
+  })
+}
+
 // First desk >= from that is not a session desk and holds no window that stays.
 function freeDesk(next, occupied, moved, from) {
   var n = from
@@ -205,21 +299,20 @@ function freeDesks(next, windows, count, from) {
 function sessionPlan(c, from, to, windows) {
   var prev = from && c.sessions[from] ? c.sessions[from].workspaces : {}
   var next = to && c.sessions[to] ? c.sessions[to].workspaces : c.workspaces
-  var prevCls = classesOf(prev), nextCls = classesOf(next)
+  var prevCls = classesOf(prev), a = assign(next, windows)
   var nums = Object.keys(next).map(Number)
   var lastDesk = nums.length ? Math.max.apply(null, nums) : 0
-  var plan = { close: [], move: [], launch: [] }, open = {}, moved = {}, occupied = Object.create(null)
-  // open[class]: windows of it open — that many of its places need no launch.
+  var plan = { close: [], move: [], launch: [] }, moved = {}, occupied = Object.create(null)
 
   // Track which desks currently hold windows
   windows.forEach(function(w) { occupied[String(w.ws)] = true })
 
   var free = lastDesk + 1
   windows.forEach(function(w) {
-    if (nextCls[w.class] !== undefined) {
-      open[w.class] = (open[w.class] || 0) + 1
+    var to = a.at[w.address]
+    if (to !== undefined) {
       moved[String(w.ws)] = true
-      if (String(w.ws) !== nextCls[w.class]) plan.move.push({ addr: w.address, ws: Number(nextCls[w.class]) })
+      if (String(w.ws) !== to) plan.move.push({ addr: w.address, ws: Number(to) })
     } else if (prevCls[w.class] !== undefined) {
       plan.close.push(w.address)
     } else if (next[String(w.ws)]) {
@@ -230,24 +323,22 @@ function sessionPlan(c, from, to, windows) {
       free++
     }
   })
-  Object.keys(next).sort(function(a, b) { return a - b }).forEach(function(ws) {
-    next[ws].slots.forEach(function(s, i) {
-      if (s && !(open[s.class]-- > 0)) plan.launch.push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
-    })
-  })
+  plan.launch = singleOnly(c, windows, a.missing)
   return plan
 }
 
-// A place of the desks in force was edited (ws, slot 1-based): launch its app if no
-// window of it is open, else move that window to the desk. Other places, other
-// windows and closed apps of other places are left alone.
+// A place of the desks in force was edited (ws, slot 1-based): move the windows of its
+// app that belong to the desk (assign) there, launch the app if its place stays empty.
+// Other apps and other places' launches are left alone.
 function applyPlan(c, active, windows, ws, slot) {
   var ds = active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces
   var d = ds[String(ws)], s = d && d.slots[slot - 1], out = { launch: [], move: [] }
   if (!s) return out
-  var w = windows.filter(function(x) { return x.class === s.class })[0]
-  if (!w) out.launch.push({ ws: String(ws), slot: slot, app: s.app, class: s.class })
-  else if (String(w.ws) !== String(ws)) out.move.push({ addr: w.address, ws: Number(ws) })
+  var a = assign(ds, windows)
+  windows.forEach(function(w) {
+    if (w.class === s.class && a.at[w.address] === String(ws) && String(w.ws) !== String(ws)) out.move.push({ addr: w.address, ws: Number(ws) })
+  })
+  out.launch = singleOnly(c, windows, a.missing.filter(function(p) { return p.ws === String(ws) && p.slot === slot }))
   return out
 }
 
@@ -255,9 +346,8 @@ function applyPlan(c, active, windows, ws, slot) {
 // desks; nothing closes, windows of other apps stay.
 function launchPlan(c, active, windows) {
   var p = sessionPlan(c, active, active, windows)
-  var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces), byAddr = {}
-  windows.forEach(function(w) { byAddr[w.address] = w })
-  return { launch: p.launch, move: p.move.filter(function(m) { return byAddr[m.addr] && cls[byAddr[m.addr].class] !== undefined }) }
+  var a = assign(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces, windows)
+  return { launch: p.launch, move: p.move.filter(function(m) { return a.at[m.addr] !== undefined }) }
 }
 
 // Desks a and b of a set ("" — regular) trade places: name, scheme, slots; the numbers
@@ -273,42 +363,54 @@ function swapDesks(raw, set, a, b) {
 }
 
 // After a swap of desks a and b in the set in force (c — the new config): open windows
-// on those desks whose class is bound go to their desk; unbound ones stay.
+// on those desks whose class is bound go to their desk (assign); unbound ones stay.
 function swapMoves(c, active, windows, a, b) {
-  var cls = classesOf(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces)
+  var at = assign(active && c.sessions[active] ? c.sessions[active].workspaces : c.workspaces, windows).at
   return windows.filter(function(w) {
-    var to = cls[w.class]
+    var to = at[w.address]
     // Only between the two swapped desks: a window bound to a third desk stays put.
     return (String(w.ws) === String(a) || String(w.ws) === String(b)) && (to === String(a) || to === String(b)) && to !== String(w.ws)
-  }).map(function(w) { return { addr: w.address, ws: Number(cls[w.class]) } })
+  }).map(function(w) { return { addr: w.address, ws: Number(at[w.address]) } })
 }
 
 // The draft: a set's desks (`setDesks`, normalized; {} for a new set) with the captured
-// windows (`captured`, captureDesks().desks) added, counted by app: as many windows of
-// an app as the set has places for it stay where they are; more of an app the set has
-// join its desk; a new app takes a free place of its desk. The scheme grows to fit (up
-// to the grid); a new app that doesn't fit goes to the nearest empty desk, then the
-// next one; the rest — to `lost` (classes).
+// windows (`captured`, captureDesks().desks) added, counted by app: a window takes the
+// set's place of its app on its own desk, then one on another desk (assign moves it
+// there); a window beyond its app's places takes a free place of its own desk — an app
+// may sit on several desks. The scheme grows to fit (up to the grid); a window that
+// doesn't fit goes to the nearest empty desk, then the next one; the rest — to `lost`.
 function mergeDesks(setDesks, captured) {
-  var desks = JSON.parse(JSON.stringify(setDesks || {})), lost = [], over = [], have = classesOf(desks), left = {}
-  Object.keys(desks).forEach(function(ws) { desks[ws].slots.forEach(function(s) { if (s) left[s.class] = (left[s.class] || 0) + 1 }) })
-  var put = function(ws, s) {
+  var desks = JSON.parse(JSON.stringify(setDesks || {})), lost = [], over = [], left = {}, leftAt = {}
+  Object.keys(desks).forEach(function(ws) {
+    desks[ws].slots.forEach(function(s) {
+      if (!s) return
+      left[s.class] = (left[s.class] || 0) + 1
+      leftAt[ws + "\n" + s.class] = (leftAt[ws + "\n" + s.class] || 0) + 1
+    })
+  })
+  // scheme: the captured one, for a desk that has no windows yet.
+  var put = function(ws, s, scheme) {
     var d = desks[ws] = desks[ws] || { scheme: "single", slots: [], name: { mode: "number" } }
+    if (scheme && !d.slots.some(function(x) { return x })) d.scheme = scheme
     var i = 0
     while (d.slots[i]) i++
     if (i >= 4) return false
     while (i >= PLACES[d.scheme]) d.scheme = SCHEME_FOR[PLACES[d.scheme] + 1]
     d.slots[i] = s
-    have[s.class] = ws
     return true
   }
-  Object.keys(captured || {}).sort(function(a, b) { return a - b }).forEach(function(ws) {
+  var order = Object.keys(captured || {}).sort(function(a, b) { return a - b }), rest = []
+  order.forEach(function(ws) {
     captured[ws].slots.forEach(function(s) {
       if (!s) return
-      if (left[s.class]) { left[s.class]--; return }
-      var known = have[s.class] !== undefined
-      if (!put(known ? have[s.class] : ws, s)) (known ? lost : over).push(known ? s.class : s)
+      var k = ws + "\n" + s.class
+      if (leftAt[k]) { leftAt[k]--; left[s.class]--; return }
+      rest.push({ ws: ws, s: s })
     })
+  })
+  rest.forEach(function(r) {
+    if (left[r.s.class]) { left[r.s.class]--; return }
+    if (!put(r.ws, r.s, captured[r.ws].scheme)) over.push(r.s)
   })
   var empty = function(ws) { return !desks[ws] || !desks[ws].slots.some(function(x) { return x }) }
   var free = [1, 2, 3, 4, 5, 6, 7, 8, 9].map(String).filter(empty), at = 0
@@ -356,12 +458,15 @@ function mainMove(pos, dx, dy, sched, heads, foot) {
 }
 
 // Places of a scheme as {x, y, w, h} fractions of the desk, in place order
-// (grid: as the engine fills it — top left, top right, bottom left, bottom right).
+// (grid: as the engine fills it — top left, top right, bottom left, bottom right;
+// main-right: the right half, then the left quarter, the middle quarter's top and bottom).
+// Master schemes at Hyprland's master:mfact (0.55), dwindle ones split in halves.
 var GEOMETRY = {
   single: [[0, 0, 1, 1]],
-  "left-right": [[0, 0, 0.6, 1], [0.6, 0, 0.4, 1]],
-  "top-bottom": [[0, 0, 1, 0.5], [0, 0.5, 1, 0.5]],
-  "main-left": [[0, 0, 0.6, 1], [0.6, 0, 0.4, 0.5], [0.6, 0.5, 0.4, 0.5]],
+  "left-right": [[0, 0, 0.55, 1], [0.55, 0, 0.45, 1]],
+  "top-bottom": [[0, 0, 1, 0.55], [0, 0.55, 1, 0.45]],
+  "main-left": [[0, 0, 0.55, 1], [0.55, 0, 0.45, 0.5], [0.55, 0.5, 0.45, 0.5]],
+  "main-right": [[0.5, 0, 0.5, 1], [0, 0, 0.25, 1], [0.25, 0, 0.25, 0.5], [0.25, 0.5, 0.25, 0.5]],
   grid: [[0, 0, 0.5, 0.5], [0.5, 0, 0.5, 0.5], [0, 0.5, 0.5, 0.5], [0.5, 0.5, 0.5, 0.5]]
 }
 function geometry(scheme) {
@@ -376,7 +481,9 @@ function placeMove(scheme, i, dx, dy) {
   g.forEach(function(p, j) {
     var px = p.x + p.w / 2 - cx, py = p.y + p.h / 2 - cy
     if (j === i || px * dx <= 0 && dx || py * dy <= 0 && dy) return
-    var d = Math.abs(px) + Math.abs(py)
+    // Along the arrow; a place beside the current one (overlapping across) comes first.
+    var beside = dx ? p.y < c.y + c.h && c.y < p.y + p.h : p.x < c.x + c.w && c.x < p.x + p.w
+    var d = Math.abs(dx ? px : py) + (beside ? 0 : 10)
     if (d < bestD) { bestD = d; best = j }
   })
   return best

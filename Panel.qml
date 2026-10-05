@@ -65,7 +65,7 @@ Item {
                                       sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login"),
                                       hideNoSession: tr("Hide the name without a session") })
   readonly property var schemeNames: ({ single: tr("One window"), "left-right": tr("Left and right"), "top-bottom": tr("Top and bottom"),
-                                        "main-left": tr("Main on the left"), grid: tr("Grid") })
+                                        "main-left": tr("Main on the left"), grid: tr("Grid"), "main-right": tr("Main on the right") })
   readonly property var days: [tr("Mon"), tr("Tue"), tr("Wed"), tr("Thu"), tr("Fri"), tr("Sat"), tr("Sun")]
 
   signal pressRow(int i)
@@ -221,13 +221,15 @@ Item {
     root.capture = { desks: m.desks, lost: taken.lost.concat(m.lost), taken: taken }
     root.captureHint = ""
   }
-  // Draft places whose app the target set doesn't have yet; none when the set is new or empty.
-  function newMarks(d) {
+  // Draft places of desk `ws` the target set doesn't have there (by count per app);
+  // none when the set is new or empty.
+  function newMarks(d, ws) {
     if (!root.capture || !d || root.target === root.newSet) return []
     var t = root.target ? (root.cfg.sessions[root.target] || {}).workspaces || {} : root.cfg.workspaces
-    var cls = Model.classesOf(t)
-    if (!Object.keys(cls).length) return []
-    return d.slots.map(function(s) { return !!s && cls[s.class] === undefined })
+    if (!Object.keys(Model.classesOf(t)).length) return []
+    var had = {}
+    ;((t[String(ws)] || {}).slots || []).forEach(function(s) { if (s) had[s.class] = (had[s.class] || 0) + 1 })
+    return d.slots.map(function(s) { return !!s && !(had[s.class]-- > 0) })
   }
   // A new session asks its name; an existing set is rewritten only after a yes.
   function askSave() {
@@ -368,7 +370,30 @@ Item {
     else if (r.type === "name" && root.desk && root.desk.name.mode === "static") root.pressRow(i)
     else root.change(i, 1)
   }
+  // Desk ws (1–9) of the edited set loses its apps, scheme and name. The draft clears at
+  // once (it's in memory), a saved set after a yes. Open windows stay.
+  property int clearWs: 0
+  function askClearDesk(ws) {
+    if (Model.isFree(root.desks[String(ws)])) return
+    if (root.capture) { root.clearDesk(ws); return }
+    root.clearWs = ws
+    confirmClear.opened = true
+  }
+  function clearDesk(ws) {
+    if (root.capture) {
+      var c = JSON.parse(JSON.stringify(root.capture))
+      delete c.desks[String(ws)]
+      root.capture = c
+      return
+    }
+    root.edit(function(next) {
+      var ds = root.set ? (next.sessions[root.set] || {}).workspaces : next.workspaces
+      if (ds) delete ds[String(ws)]
+    })
+  }
+
   function remove() {
+    if (root.page === "main" && typeof root.pos === "number") { root.askClearDesk(root.pos + 1); return }
     var r = root.page === "main" ? null : root.rows[root.cursor]
     if (r && r.type === "places") root.setPlace(root.place, "")
     else if (r && r.type === "rule") root.removeRule(r.index)
@@ -461,6 +486,7 @@ Item {
         anchors.leftMargin: card.contentLeftInset
         Keys.onPressed: function(event) {
           if (confirmDelete.opened) event.accepted = confirmDelete.handleKey(event)
+          else if (confirmClear.opened) event.accepted = confirmClear.handleKey(event)
           else if (confirmOverwrite.opened) event.accepted = confirmOverwrite.handleKey(event)
           else if (event.key === Qt.Key_Escape) { root.adding = false; keyCatcher.forceActiveFocus(); event.accepted = true }
         }
@@ -469,7 +495,7 @@ Item {
           id: keyCatcher
           anchors.fill: parent
           focus: true
-          blocked: confirmDelete.opened || confirmOverwrite.opened || root.typing
+          blocked: confirmDelete.opened || confirmClear.opened || confirmOverwrite.opened || root.typing
           onMoveRequested: function(dx, dy) { if (!root.confirming) root.arrow(dx, dy) }
           onActivateRequested: root.activate()
           onCloseRequested: root.back()
@@ -679,6 +705,18 @@ Item {
         fontFamily: root.font
         onCanceled: { opened = false; keyCatcher.forceActiveFocus() }
         onConfirmed: { opened = false; root.saveCapture(root.target, false); keyCatcher.forceActiveFocus() }
+      }
+      ConfirmDialog {
+        id: confirmClear
+        anchors.fill: parent
+        z: 10
+        message: root.tr("Clear desk %1?", root.clearWs)
+        cancelText: root.tr("Cancel")
+        confirmText: root.tr("Clear")
+        foreground: root.fg
+        fontFamily: root.font
+        onCanceled: { opened = false; keyCatcher.forceActiveFocus() }
+        onConfirmed: { opened = false; root.clearDesk(root.clearWs); keyCatcher.forceActiveFocus() }
       }
       ConfirmDialog {
         id: confirmDelete

@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks, schemeOf, singleGroup }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -142,6 +142,7 @@ assert.strictEqual(M.mainMove("head1", 0, 1, false), 0); assert.strictEqual(M.ma
 assert.strictEqual(M.placeMove("main-left", 0, 1, 0), 1); assert.strictEqual(M.placeMove("main-left", 1, 0, 1), 2)
 assert.strictEqual(M.placeMove("main-left", 2, -1, 0), 0); assert.strictEqual(M.placeMove("main-left", 1, 0, -1), -1)
 assert.strictEqual(M.placeMove("grid", 0, 0, 1), 2); assert.strictEqual(M.placeMove("grid", 3, -1, 0), 2)
+assert.strictEqual(M.placeMove("main-right", 1, 1, 0), 2); assert.strictEqual(M.placeMove("main-right", 2, 0, 1), 3); assert.strictEqual(M.placeMove("main-right", 3, 1, 0), 0)
 assert.strictEqual(M.placeMove("top-bottom", 1, 0, -1), 0); assert.strictEqual(M.placeMove("single", 0, 1, 0), -1)
 // tiles
 const tc = M.normalize({ workspaces: { "1": {}, "2": { scheme: "grid" }, "3": { name: { mode: "dynamic" } }, "4": { slots: [{ class: "a" }] } } }).workspaces
@@ -179,14 +180,14 @@ const ce = [{ id: "firefox.desktop", name: "Firefox", startupClass: "firefox" },
   { id: "e.desktop", name: "E", startupClass: "e" }]
 const cap = M.captureDesks([{ class: "firefox", ws: 1 }, { class: "firefox", ws: 2 }, { class: "zzz", ws: 2 },
   { class: "a", ws: 3 }, { class: "b", ws: 3 }, { class: "c", ws: 3 }, { class: "d", ws: 3 }, { class: "e", ws: 3 }, { class: "a", ws: -98 }], ce)
-// two windows of an app: both kept, on the desk of the first
-assert.deepStrictEqual(cap.desks["1"], { scheme: "left-right", slots: [{ app: "firefox", class: "firefox" }, { app: "firefox", class: "firefox" }], name: { mode: "number" } })
-assert.strictEqual(cap.desks["2"], undefined)
+// two windows of an app on two desks: each stays on its own
+assert.deepStrictEqual(cap.desks["1"], { scheme: "single", slots: [{ app: "firefox", class: "firefox" }], name: { mode: "number" } })
+assert.deepStrictEqual(cap.desks["2"].slots.map(s => s.class), ["firefox"])
 assert.strictEqual(cap.desks["3"].scheme, "grid"); assert.deepStrictEqual(cap.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d", "e"])
 assert.deepStrictEqual(cap.lost.sort(), ["a", "zzz"])
-// a new set: the 5th window of desk 3 goes to the nearest empty desk (2)
+// a new set: the 5th window of desk 3 goes to the nearest empty desk (4)
 const capm = M.mergeDesks({}, cap.desks)
-assert.deepStrictEqual(capm.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d"]); assert.deepStrictEqual(capm.desks["2"].slots.map(s => s.class), ["e"])
+assert.deepStrictEqual(capm.desks["3"].slots.map(s => s.class), ["a", "b", "c", "d"]); assert.deepStrictEqual(capm.desks["4"].slots.map(s => s.class), ["e"])
 assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }], ce).desks["4"].scheme, "left-right")
 assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }, { class: "c", ws: 4 }], ce).desks["4"].scheme, "main-left")
 // the capture page: 2 header controls, "save" under the tiles; the main page: 4
@@ -194,6 +195,7 @@ assert.strictEqual(M.mainMove(7, 0, 1, false, 2, true), "save"); assert.strictEq
 assert.strictEqual(M.mainMove("head0", 1, 0, false, 2, true), "head1"); assert.strictEqual(M.mainMove("head1", 1, 0, false, 2, true), "head1")
 assert.strictEqual(M.mainMove("head2", 1, 0, true, 4), "head3")
 // no guess by the last segment: org.omarchy.agent is not an "…agent" app
+assert.deepStrictEqual(M.captureDesks([{ class: "chrome-telemost.360.yandex.ru__j_1-Default", ws: 3 }], [{ id: "Telemost.desktop", name: "Telemost", execString: "omarchy-launch-webapp \"https://telemost.360.yandex.ru/\"" }]).desks["3"].slots[0].app, "Telemost")
 assert.deepStrictEqual(M.captureDesks([{ class: "org.omarchy.agent", ws: 1 }], [{ id: "ideco.desktop", name: "Ideco", startupClass: "com.ideco.agent" }]),
   { desks: {}, lost: ["org.omarchy.agent"] })
 // merge: the set's apps stay, new ones take free places, the scheme grows, overflow is lost
@@ -210,11 +212,50 @@ assert.deepStrictEqual(fm.desks["1"].slots.map(x => x.class), ["e", "f", "g", "h
 assert.deepStrictEqual(M.mergeDesks(M.normalize({ workspaces: Object.assign({}, full, { "2": { scheme: "grid", slots: ["a", "b", "c", "d"].map(c => ({ class: c })) } }) }).workspaces,
   { "2": { slots: [{ class: "e" }] } }).lost, ["e"])
 assert.strictEqual(md["1"].slots.length, 1)   // the input is untouched
-// by count: the set has one "y", two are open — one more joins its desk
+// by count: the set has one "y" (desk 1), two are open on desk 3 — one takes the set's
+// place (it'll move), the other stays on desk 3
 const mc = M.mergeDesks(md, { "3": { slots: [{ class: "y" }, { class: "y" }] } })
-assert.deepStrictEqual(mc.desks["1"].slots.map(x => x.class), ["y", "y"]); assert.strictEqual(mc.desks["3"], undefined)
+assert.deepStrictEqual(mc.desks["1"].slots.map(x => x.class), ["y"]); assert.deepStrictEqual(mc.desks["3"].slots.map(x => x.class), ["y"])
+// the user's case: Work has webstorm on 2; agent + foot added there, agent + foot + telemost on 3
+const wk = M.normalize({ workspaces: { "2": { slots: [{ app: "ws", class: "ws" }] } } }).workspaces
+const wm = M.mergeDesks(wk, { "2": { scheme: "main-left", slots: ["ws", "ag", "ft"].map(c => ({ app: c, class: c })) },
+  "3": { scheme: "main-right", slots: ["tm", "ag", "ft", "ft"].map(c => ({ app: c, class: c })) } })
+assert.deepStrictEqual(wm.desks["2"].slots.map(x => x.class), ["ws", "ag", "ft"]); assert.strictEqual(wm.desks["2"].scheme, "main-left")
+assert.deepStrictEqual(wm.desks["3"].slots.map(x => x.class), ["tm", "ag", "ft", "ft"]); assert.strictEqual(wm.desks["3"].scheme, "main-right")
 // launch: two places of a class, one window open — one launch
 const dup = M.normalize({ workspaces: { "1": { scheme: "left-right", slots: [{ app: "f", class: "f" }, { app: "f", class: "f" }] } } })
 assert.strictEqual(M.sessionPlan(dup, "", "", [{ address: "1", ws: 1, class: "f" }]).launch.length, 1)
 assert.strictEqual(M.sessionPlan(dup, "", "", []).launch.length, 2)
+// an app on two desks: each window keeps its desk, a missing one launches on its desk
+const two = M.normalize({ workspaces: { "2": { scheme: "left-right", slots: [{ app: "w", class: "w" }, { app: "f", class: "f" }] }, "3": { slots: [{ app: "f", class: "f" }] } } })
+const tp = M.sessionPlan(two, "", "", [{ address: "a", ws: 3, class: "f" }, { address: "w", ws: 2, class: "w" }])
+assert.deepStrictEqual(tp.move, []); assert.deepStrictEqual(tp.launch.map(l => l.ws + ":" + l.class), ["2:f"])
+// both on desk 5: one goes to 2, the other to 3
+assert.deepStrictEqual(M.sessionPlan(two, "", "", [{ address: "a", ws: 5, class: "f" }, { address: "b", ws: 5, class: "f" }]).move, [{ addr: "a", ws: 2 }, { addr: "b", ws: 3 }])
+// a third one joins the app's first desk
+assert.strictEqual(M.sessionPlan(two, "", "", [{ address: "a", ws: 2, class: "f" }, { address: "b", ws: 3, class: "f" }, { address: "c", ws: 7, class: "f" }]).move[0].ws, 2)
+// applyPlan: the edited place on desk 3 — the window on 3 is its own, nothing to do
+assert.deepStrictEqual(M.applyPlan(two, "", [{ address: "a", ws: 3, class: "f" }], 2, 2), { launch: [{ ws: "2", slot: 2, app: "f", class: "f" }], move: [] })
+// swap 2 ↔ 3 in the new config: the f window on 3 — desk 3 now has f too (from 2), it stays; w goes to 3
+const sw2 = M.normalize({ workspaces: { "3": { scheme: "left-right", slots: [{ app: "w", class: "w" }, { app: "f", class: "f" }] }, "2": { slots: [{ app: "f", class: "f" }] } } })
+assert.deepStrictEqual(M.swapMoves(sw2, "", [{ address: "a", ws: 3, class: "f" }, { address: "w", ws: 2, class: "w" }], 2, 3), [{ addr: "w", ws: 3 }])
+// single-instance apps: one launch per rule, none when one is open
+const si = M.normalize({ singleInstance: [{ match: "^chrome%-telemost%.[%w.]*yandex%.ru__%-Default$", action: "focus" }],
+  workspaces: { "2": { slots: [{ app: "t", class: "chrome-telemost.360.yandex.ru__-Default" }] }, "3": { slots: [{ app: "t", class: "chrome-telemost.360.yandex.ru__-Default" }] } } })
+assert.strictEqual(M.sessionPlan(si, "", "", []).launch.length, 1)
+assert.strictEqual(M.sessionPlan(si, "", "", [{ address: "x", ws: 9, class: "chrome-telemost.360.yandex.ru__-Default" }]).launch.length, 0)
+assert.strictEqual(M.singleGroup([{ match: "^chrome%-telemost%.[%w.]*yandex%.ru__j_" }], "chrome-telemost.360.yandex.ru__j_65-Default"), 0)
+assert.strictEqual(M.singleGroup([{ match: "^chrome%-telemost%.[%w.]*yandex%.ru__j_" }], "chrome-telemost.360.yandex.ru__-Default"), -1)
+assert.strictEqual(M.singleGroup([{ class: "foot" }], "foot"), 0)
 console.log("ok")
+
+// ws 3 as tiled live: agent ¼ | foot / foot ¼ | telemost ½ → main-right, telemost in place 1
+const live = [{ ws: 3, at: [12, 57], size: [846, 1371] }, { ws: 3, at: [872, 57], size: [841, 679] },
+  { ws: 3, at: [872, 750], size: [841, 678] }, { ws: 3, at: [1727, 57], size: [1701, 1371] }]
+assert.deepStrictEqual(M.schemeOf(live, 3), { scheme: "main-right", order: [3, 0, 1, 2] })
+assert.strictEqual(M.schemeOf([{ ws: 1, at: [0, 0], size: [10, 10] }, { ws: 1, at: [0, 10], size: [10, 10] }], 1).scheme, "top-bottom")
+assert.strictEqual(M.schemeOf(live.map(w => Object.assign({}, w, { floating: true })), 3), null)
+console.log("ok schemeOf")
+const mr = M.mergeDesks({}, { "3": { scheme: "main-right", slots: ["t", "a", "f", "f"].map(c => ({ app: c, class: c })) } })
+assert.strictEqual(mr.desks["3"].scheme, "main-right"); assert.deepStrictEqual(mr.desks["3"].slots.map(x => x.class), ["t", "a", "f", "f"])
+console.log("ok merge scheme")

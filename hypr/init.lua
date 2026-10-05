@@ -62,6 +62,24 @@ local function on(ev, fn) hl.on(ev, fn) end
 on("window.open", function(w)
   if not w or not w.workspace or w.floating then return end
   local id = w.workspace.id
+  -- An app on several desks: the rule put it on its first one; go where a place is free.
+  local counts = {}
+  for _, ws in ipairs(hl.get_workspaces()) do
+    for _, o in ipairs(hl.get_workspace_windows(ws.id)) do
+      if o.address ~= w.address and o.class == w.class and o.workspace and o.workspace.id == ws.id then
+        counts[tostring(ws.id)] = (counts[tostring(ws.id)] or 0) + 1
+      end
+    end
+  end
+  local to = bind.target(desks, w.class, counts)
+  if to and to ~= tostring(id) and bind.target(desks, w.class, {}) == tostring(id) then
+    hl.dispatch(hl.dsp.window.move({ window = "address:" .. w.address, workspace = to, follow = false }))
+    local td = desks[to]
+    if bind.layout(td.scheme) and bind.layout(td.scheme).layout == "master" then
+      hl.timer(function() place_master(tonumber(to), td) end, { timeout = 50, type = "oneshot" })
+    end
+    return
+  end
   local d = desks[tostring(id)]
   if not d then return end
   local taken = {}
@@ -73,7 +91,7 @@ on("window.open", function(w)
   end
   local i = bind.slot(d, w.class, taken)
   if i then
-    if d.scheme == "grid" then
+    if (bind.layout(d.scheme) or {}).layout == "dwindle" then
       local active = hl.get_active_workspace()
       if active and active.id == id then
         for _, msg in ipairs(bind.place_cmds(d.scheme, i, config.PLACES[d.scheme])) do hl.dispatch(hl.dsp.layout(msg)) end

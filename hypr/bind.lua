@@ -4,21 +4,52 @@ local M = {}
 
 local function regex(class) return "^(" .. class:gsub("[%-%.%+%*%?%[%]%(%)%^%$|\\]", "\\%0") .. ")$" end
 
+local function ordered(desks)
+  local ids = {}
+  for ws in pairs(desks) do ids[#ids + 1] = tonumber(ws) end
+  table.sort(ids)
+  for i, n in ipairs(ids) do ids[i] = tostring(n) end
+  return ids
+end
+
+-- One rule per class, to its first desk: an app on several desks opens there and
+-- window.open moves it on (M.target).
 function M.rules(desks)
-  local out = {}
-  for ws, d in pairs(desks) do
+  local out, seen = {}, {}
+  for _, ws in ipairs(ordered(desks)) do
+    local d = desks[ws]
     for i = 1, config.PLACES[d.scheme] do
       local s = d.slots[i]
-      if s then out[#out + 1] = { class = regex(s.class), workspace = ws } end
+      if s and not seen[s.class] then
+        seen[s.class] = true
+        out[#out + 1] = { class = regex(s.class), workspace = ws }
+      end
     end
   end
   return out
 end
 
+-- The desk for a new window of `class`: the first one with fewer of its windows
+-- (counts[ws], the others open) than places for it, else its first desk; nil — no places.
+function M.target(desks, class, counts)
+  local first
+  for _, ws in ipairs(ordered(desks)) do
+    local d, places = desks[ws], 0
+    for i = 1, config.PLACES[d.scheme] do
+      if d.slots[i] and d.slots[i].class == class then places = places + 1 end
+    end
+    if places > 0 then
+      first = first or ws
+      if (counts[ws] or 0) < places then return ws end
+    end
+  end
+  return first
+end
+
 local LAYOUTS = { ["left-right"] = { layout = "master", orientation = "left" },
                   ["main-left"] = { layout = "master", orientation = "left" },
                   ["top-bottom"] = { layout = "master", orientation = "top" },
-                  grid = { layout = "dwindle" } }
+                  grid = { layout = "dwindle" }, ["main-right"] = { layout = "dwindle" } }
 function M.layout(scheme) return LAYOUTS[scheme] end
 
 function M.slot(desk, class, taken)
@@ -49,6 +80,10 @@ function M.place_cmds(scheme, index, count)
     if index == 1 then return { "preselect r" } end
     if index == 2 then return { "preselect d" } end
     return {}
+  end
+  -- Built without moving focus: 2 opens left of 1, 3 right of 2, 4 under 3.
+  if scheme == "main-right" then
+    return ({ { "preselect l" }, { "preselect r" }, { "preselect d" } })[index] or {}
   end
   if index == 1 then return { "swapwithmaster master" } end
   return {}

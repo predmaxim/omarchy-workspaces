@@ -41,6 +41,7 @@ Item {
           root.scheduleChecked = true
           var name = Model.scheduleAt(root.cfg, new Date())
           if (name && name !== root.cfg.activeSession) root.requestSession(name)
+          else root.launchActive()   // already in force: its apps still have to start
         }
       } catch (e) {
         root.loadError = String(e)   // keep the last good one
@@ -88,7 +89,8 @@ Item {
     return Hyprland.toplevels.values.map(function(t) {
       var o = t.lastIpcObject || {}
       var a = String(t.address)
-      return { address: a.indexOf("0x") === 0 ? a : "0x" + a, class: o.class || "", title: o.title || "", ws: t.workspace ? t.workspace.id : 0 }
+      return { address: a.indexOf("0x") === 0 ? a : "0x" + a, class: o.class || "", title: o.title || "", ws: t.workspace ? t.workspace.id : 0,
+               at: o.at, size: o.size, floating: !!o.floating }
     })
   }
 
@@ -267,6 +269,8 @@ Item {
     Quickshell.execDetached(["uwsm-app", "--", "gtk-launch", /\.desktop$/.test(d) ? d : d + ".desktop"])
   }
 
+  function countOf(cls) { return root.windowsNow().filter(function(w) { return w.class === cls }).length }
+
   function launchNext() {
     if (root.launchQueue.length === 0) { root.phase = ""; root.plan = null; return }
     if (!root.cfg.sequentialLaunch) {
@@ -275,20 +279,22 @@ Item {
       root.launchNext()
       return
     }
-    root.launchApp(root.launchQueue[0].app)
     launchWait.cls = root.launchQueue[0].class
+    launchWait.before = root.countOf(launchWait.cls)
+    root.launchApp(root.launchQueue[0].app)
     launchWait.elapsed = 0
     launchWait.start()
   }
   Timer {
     id: launchWait
     property string cls: ""
+    property int before: 0   // its windows before the launch: an app may have several places
     property int elapsed: 0
     property string focused: ""
     interval: 200; repeat: true
     onTriggered: {
       elapsed += interval
-      var up = root.windowsNow().some(function(w) { return w.class === cls })
+      var up = root.countOf(cls) > before
       if (up || elapsed >= 15000) { stop(); root.launchQueue = root.launchQueue.slice(1); root.launchNext() }
     }
   }
