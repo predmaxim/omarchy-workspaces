@@ -38,7 +38,7 @@ Panel {
   // "" (no session) first, then the sessions.
   readonly property var sessionRows: [""].concat(Object.keys(cfg.sessions))
   // Under the sessions: take the open windows (the modal's draft), set up the sessions (the modal).
-  readonly property var actionRows: [{ key: "capture", text: tr("Take the open windows") }, { key: "edit", text: tr("Set up sessions") }]
+  readonly property var actionRows: [{ key: "capture", icon: "󰄀", text: tr("Take the open windows") }, { key: "edit", icon: "󰒓", text: tr("Set up sessions") }]
   property int cursor: 0
 
   function workspaceById(id) {
@@ -257,8 +257,19 @@ Panel {
             }
 
             Text {
-              id: actionLabel
+              id: actionIcon
               anchors.left: parent.left
+              anchors.leftMargin: Style.space(8)
+              anchors.verticalCenter: parent.verticalCenter
+              text: action.modelData.icon
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+            }
+
+            Text {
+              id: actionLabel
+              anchors.left: actionIcon.right
               anchors.leftMargin: Style.space(8)
               anchors.right: parent.right
               anchors.verticalCenter: parent.verticalCenter
