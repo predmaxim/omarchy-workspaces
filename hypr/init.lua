@@ -15,7 +15,7 @@ local desks = config.active(cfg)
 local function fixed_of(c)
   local out = {}
   for ws, d in pairs(config.active(c)) do
-    if next(d.slots) ~= nil or (d.name and d.name.mode == "static") then out[tonumber(ws)] = true end
+    if tonumber(ws) and (next(d.slots) ~= nil or (d.name and d.name.mode == "static")) then out[tonumber(ws)] = true end
   end
   return out
 end
@@ -26,7 +26,7 @@ end
 for ws, d in pairs(desks) do
   local l = bind.layout(d.scheme)
   if l then
-    hl.workspace_rule({ workspace = ws, layout = l.layout,
+    hl.workspace_rule({ workspace = bind.hypr_ws(ws), layout = l.layout,
                         layout_opts = l.orientation and { orientation = l.orientation } or nil })
   end
 end
@@ -61,26 +61,26 @@ local function on(ev, fn) hl.on(ev, fn) end
 
 on("window.open", function(w)
   if not w or not w.workspace or w.floating then return end
-  local id = w.workspace.id
+  local id, key = w.workspace.id, bind.key(w.workspace)
   -- An app on several desks: the rule put it on its first one; go where a place is free.
   local counts = {}
   for _, ws in ipairs(hl.get_workspaces()) do
     for _, o in ipairs(hl.get_workspace_windows(ws.id)) do
       if o.address ~= w.address and o.class == w.class and o.workspace and o.workspace.id == ws.id then
-        counts[tostring(ws.id)] = (counts[tostring(ws.id)] or 0) + 1
+        counts[bind.key(ws)] = (counts[bind.key(ws)] or 0) + 1
       end
     end
   end
   local to = bind.target(desks, w.class, counts)
-  if to and to ~= tostring(id) and bind.target(desks, w.class, {}) == tostring(id) then
-    hl.dispatch(hl.dsp.window.move({ window = "address:" .. w.address, workspace = to, follow = false }))
+  if to and to ~= key and bind.target(desks, w.class, {}) == key then
+    hl.dispatch(hl.dsp.window.move({ window = "address:" .. w.address, workspace = bind.hypr_ws(to), follow = false }))
     local td = desks[to]
-    if bind.layout(td.scheme) and bind.layout(td.scheme).layout == "master" then
+    if tonumber(to) and bind.layout(td.scheme) and bind.layout(td.scheme).layout == "master" then
       hl.timer(function() place_master(tonumber(to), td) end, { timeout = 50, type = "oneshot" })
     end
     return
   end
-  local d = desks[tostring(id)]
+  local d = desks[key]
   if not d then return end
   local taken = {}
   for _, o in ipairs(hl.get_workspace_windows(id)) do
@@ -102,7 +102,8 @@ on("window.open", function(w)
     end
     return
   end
-  local f = bind.foreign(cfg, desks, tostring(id), occupied())
+  if key == bind.SCRATCH then return end   -- the scratchpad keeps any window sent there
+  local f = bind.foreign(cfg, desks, key, occupied())
   local win = "address:" .. w.address
   if f.action == "float" then
     hl.dispatch(hl.dsp.window.float({ window = win, action = "enable" }))

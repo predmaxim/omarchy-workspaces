@@ -89,7 +89,8 @@ Item {
     return Hyprland.toplevels.values.map(function(t) {
       var o = t.lastIpcObject || {}
       var a = String(t.address)
-      return { address: a.indexOf("0x") === 0 ? a : "0x" + a, class: o.class || "", title: o.title || "", ws: t.workspace ? t.workspace.id : 0,
+      return { address: a.indexOf("0x") === 0 ? a : "0x" + a, class: o.class || "", title: o.title || "",
+               ws: !t.workspace ? 0 : t.workspace.name === "special:scratchpad" ? "scratchpad" : t.workspace.id,
                at: o.at, size: o.size, floating: !!o.floating }
     })
   }
@@ -180,7 +181,8 @@ Item {
   function finishSwitch() {
     var to = root.pendingPlan.to
     var moves = root.plan.move.slice()
-    var start = Math.max.apply(null, [0].concat(moves.map(function(m) { return m.ws }), Object.keys(root.cfg.sessions[to] ? root.cfg.sessions[to].workspaces : root.cfg.workspaces).map(Number))) + 1
+    var start = Math.max.apply(null, [0].concat(moves.map(function(m) { return m.ws }), Object.keys(root.cfg.sessions[to] ? root.cfg.sessions[to].workspaces : root.cfg.workspaces).map(Number))
+      .filter(function(n) { return typeof n === "number" && !isNaN(n) })) + 1
     var staying = root.windowsNow().filter(function(w) { return root.stuck.indexOf(w.address) < 0 && root.plan.close.indexOf(w.address) < 0 })
     var spots = Model.freeDesks(to && root.cfg.sessions[to] ? root.cfg.sessions[to].workspaces : root.cfg.workspaces, staying, root.stuck.length, start)
     root.stuck.forEach(function(a, i) { moves.push({ addr: a, ws: spots[i] }) })

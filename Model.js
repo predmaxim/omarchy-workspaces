@@ -7,11 +7,18 @@ var SCHEMES = ["single", "left-right", "top-bottom", "main-left", "grid", "main-
 var CHOICES = { foreignWindow: ["tile", "float", "next"], collapse: ["free", "all", "off"], collapseInSession: ["free", "all", "off"] }
 var DEFAULTS = { foreignWindow: "tile", collapse: "free", collapseInSession: "free", sequentialLaunch: false, schedule: true, hideNoSession: true }
 
+// The scratchpad (Hyprland's special:scratchpad, Super+S) is a desk of its own,
+// keyed "scratchpad" in config.json, after desks 1–9.
+var SCRATCH = "scratchpad"
+function byDesk(a, b) { return (a === SCRATCH) - (b === SCRATCH) || a - b }
+// A desk key as a window move target: a number, or the special workspace.
+function moveTo(ws) { return ws === SCRATCH ? "special:" + SCRATCH : Number(ws) }
+
 function desks(t) {
   var out = {}
   Object.keys(t || {}).forEach(function(ws) {
     var d = t[ws]
-    if (typeof d !== "object" || d === null || isNaN(Number(ws))) return
+    if (typeof d !== "object" || d === null || (isNaN(Number(ws)) && ws !== SCRATCH)) return
     var scheme = PLACES[d.scheme] ? d.scheme : "single"
     // Places keep their numbers: an empty place is null (trailing ones dropped).
     var slots = [], slotArr = Array.isArray(d.slots) ? d.slots : []
@@ -122,13 +129,13 @@ function captureDesks(windows, entries) {
   var byWs = {}, lost = []
   ;(windows || []).forEach(function(w) {
     var e = w.class ? entryOf(w.class, entries, true) : null
-    if (!e || !(w.ws >= 1 && w.ws <= 9)) return lost.push(w.class || w.title || "?")
+    if (!e || !(w.ws >= 1 && w.ws <= 9 || w.ws === SCRATCH)) return lost.push(w.class || w.title || "?")
     var ws = w.ws
     ;(byWs[ws] = byWs[ws] || []).push({ app: String(e.id).replace(/\.desktop$/, ""), class: w.class, w: w })
   })
   var desks = {}
   Object.keys(byWs).forEach(function(ws) {
-    var slots = byWs[ws], seen = schemeOf(slots.map(function(s) { return s.w }), Number(ws))
+    var slots = byWs[ws], seen = schemeOf(slots.map(function(s) { return s.w }), ws === SCRATCH ? ws : Number(ws))
     if (seen) slots = seen.order.map(function(j) { return slots[j] })
     slots = slots.map(function(s) { return { app: s.app, class: s.class } })
     desks[ws] = { scheme: seen ? seen.scheme : SCHEME_FOR[Math.min(slots.length, 4)], slots: slots, name: { mode: "number" } }
@@ -215,7 +222,7 @@ function classesOf(ds) {
 // places [{ws, slot, app, class}] by desk, then place.
 function assign(ds, windows) {
   var free = {}, first = {}, at = {}, rest = [], missing = []
-  Object.keys(ds).sort(function(a, b) { return a - b }).forEach(function(ws) {
+  Object.keys(ds).sort(byDesk).forEach(function(ws) {
     ds[ws].slots.forEach(function(s, i) {
       if (!s) return
       ;(free[s.class] = free[s.class] || []).push({ ws: ws, slot: i + 1, app: s.app, class: s.class })
@@ -230,10 +237,10 @@ function assign(ds, windows) {
     else rest.push(w)
   })
   rest.forEach(function(w) { var f = free[w.class]; at[w.address] = f.length ? f.shift().ws : first[w.class] })
-  Object.keys(ds).sort(function(a, b) { return a - b }).forEach(function(ws) {
+  Object.keys(ds).sort(byDesk).forEach(function(ws) {
     Object.keys(free).forEach(function(c) { free[c].forEach(function(p) { if (p.ws === ws) missing.push(p) }) })
   })
-  missing.sort(function(a, b) { return a.ws - b.ws || a.slot - b.slot })
+  missing.sort(function(a, b) { return byDesk(a.ws, b.ws) || a.slot - b.slot })
   return { at: at, missing: missing }
 }
 
@@ -312,10 +319,10 @@ function sessionPlan(c, from, to, windows) {
     var to = a.at[w.address]
     if (to !== undefined) {
       moved[String(w.ws)] = true
-      if (String(w.ws) !== to) plan.move.push({ addr: w.address, ws: Number(to) })
+      if (String(w.ws) !== to) plan.move.push({ addr: w.address, ws: moveTo(to) })
     } else if (prevCls[w.class] !== undefined) {
       plan.close.push(w.address)
-    } else if (next[String(w.ws)]) {
+    } else if (next[String(w.ws)] && w.ws !== SCRATCH) {   // the scratchpad keeps strangers
       moved[String(w.ws)] = true
       // Find next free desk: skip session desks and desks with unmoved windows
       free = freeDesk(next, occupied, moved, free)
@@ -336,7 +343,7 @@ function applyPlan(c, active, windows, ws, slot) {
   if (!s) return out
   var a = assign(ds, windows)
   windows.forEach(function(w) {
-    if (w.class === s.class && a.at[w.address] === String(ws) && String(w.ws) !== String(ws)) out.move.push({ addr: w.address, ws: Number(ws) })
+    if (w.class === s.class && a.at[w.address] === String(ws) && String(w.ws) !== String(ws)) out.move.push({ addr: w.address, ws: moveTo(String(ws)) })
   })
   out.launch = singleOnly(c, windows, a.missing.filter(function(p) { return p.ws === String(ws) && p.slot === slot }))
   return out
@@ -370,7 +377,7 @@ function swapMoves(c, active, windows, a, b) {
     var to = at[w.address]
     // Only between the two swapped desks: a window bound to a third desk stays put.
     return (String(w.ws) === String(a) || String(w.ws) === String(b)) && (to === String(a) || to === String(b)) && to !== String(w.ws)
-  }).map(function(w) { return { addr: w.address, ws: Number(at[w.address]) } })
+  }).map(function(w) { return { addr: w.address, ws: moveTo(at[w.address]) } })
 }
 
 // The draft: a set's desks (`setDesks`, normalized; {} for a new set) with the captured
@@ -399,7 +406,7 @@ function mergeDesks(setDesks, captured) {
     d.slots[i] = s
     return true
   }
-  var order = Object.keys(captured || {}).sort(function(a, b) { return a - b }), rest = []
+  var order = Object.keys(captured || {}).sort(byDesk), rest = []
   order.forEach(function(ws) {
     captured[ws].slots.forEach(function(s) {
       if (!s) return
@@ -439,17 +446,19 @@ function rows(page, c) {
   return out
 }
 
-// The main page's cursor: a tile 0–8, "sched" (the schedule row, sessions only) or
-// "head0"…"head<heads-1>" (the header's controls, left to right) or "save" (the capture
-// page's button under the tiles, `foot`). Arrows over the 3×3 grid; ↑ from the top
-// row — the schedule row, then the header; ↓ from the bottom row — "save".
+// The main page's cursor: a tile 0–8, 9 (the scratchpad, under the grid on the left),
+// "sched" (the schedule row, sessions only) or "head0"…"head<heads-1>" (the header's
+// controls, left to right) or "save" (the capture page's button under the tiles,
+// `foot`). Arrows over the 3×3 grid; ↑ from the top row — the schedule row, then the
+// header; ↓ from the bottom row — the scratchpad, then "save".
 function mainMove(pos, dx, dy, sched, heads, foot) {
   heads = heads || 3
-  if (pos === "save") return dy < 0 ? 7 : pos
+  if (pos === "save") return dy < 0 ? 9 : pos
+  if (pos === 9) return dy < 0 ? 6 : dy > 0 && foot ? "save" : pos
   if (typeof pos === "number") {
     var r = Math.floor(pos / 3), col = pos % 3
     if (dy < 0 && r === 0) return sched ? "sched" : "head0"
-    if (dy > 0 && r === 2 && foot) return "save"
+    if (dy > 0 && r === 2) return 9
     return Math.max(0, Math.min(2, r + dy)) * 3 + Math.max(0, Math.min(2, col + dx))
   }
   if (pos === "sched") return dy < 0 ? "head0" : dy > 0 ? 0 : pos

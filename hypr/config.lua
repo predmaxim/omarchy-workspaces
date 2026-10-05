@@ -12,7 +12,7 @@ M.DEFAULTS = { foreignWindow = "tile", collapse = "free", collapseInSession = "f
 local function desks(t)
   local out = {}
   for ws, d in pairs(type(t) == "table" and t or {}) do
-    if type(d) == "table" and tonumber(ws) then
+    if type(d) == "table" and (tonumber(ws) or ws == "scratchpad") then
       local scheme = M.PLACES[d.scheme] and d.scheme or "single"
       -- Places keep their numbers: an empty place (null in JSON) stays a nil hole,
       -- so read slots with `for i = 1, M.PLACES[scheme]`, not ipairs or #.

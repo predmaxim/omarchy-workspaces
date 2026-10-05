@@ -4,11 +4,18 @@ local M = {}
 
 local function regex(class) return "^(" .. class:gsub("[%-%.%+%*%?%[%]%(%)%^%$|\\]", "\\%0") .. ")$" end
 
+-- The scratchpad desk ("scratchpad" in config.json) is Hyprland's special:scratchpad.
+M.SCRATCH = "scratchpad"
+function M.hypr_ws(key) return key == M.SCRATCH and "special:" .. M.SCRATCH or key end
+-- The desk key of a Hyprland workspace {id, name}.
+function M.key(ws) return ws.name == "special:" .. M.SCRATCH and M.SCRATCH or tostring(ws.id) end
+
 local function ordered(desks)
   local ids = {}
-  for ws in pairs(desks) do ids[#ids + 1] = tonumber(ws) end
+  for ws in pairs(desks) do if tonumber(ws) then ids[#ids + 1] = tonumber(ws) end end
   table.sort(ids)
   for i, n in ipairs(ids) do ids[i] = tostring(n) end
+  if desks[M.SCRATCH] then ids[#ids + 1] = M.SCRATCH end
   return ids
 end
 
@@ -22,7 +29,7 @@ function M.rules(desks)
       local s = d.slots[i]
       if s and not seen[s.class] then
         seen[s.class] = true
-        out[#out + 1] = { class = regex(s.class), workspace = ws }
+        out[#out + 1] = { class = regex(s.class), workspace = M.hypr_ws(ws) }
       end
     end
   end

@@ -30,7 +30,8 @@ Item {
 
   property string page: "main"     // main | desk | schedule | settings
   property string set: ""          // "" — plain desks, else a session
-  property int deskWs: 1           // the desk page's desk
+  property var deskWs: 1           // the desk page's desk: 1–9 or "scratchpad"
+  function wsOf(pos) { return pos === 9 ? "scratchpad" : pos + 1 }   // a tile's desk
   property var pos: 0              // main page cursor (Model.mainMove)
   property int cursor: 1           // list pages: the row
   property int place: 0            // desk page: the place under the cursor
@@ -50,7 +51,9 @@ Item {
   property string target: ""       // where the draft goes: a set or newSet
   property string captureHint: ""  // why the draft can't go under that name
 
+  // The scratchpad has no name: the bar doesn't show it.
   readonly property var rows: confirming || page === "main" ? [] : Model.rows(page, cfg)
+    .filter(function(r) { return !(page === "desk" && deskWs === "scratchpad" && r.type === "name") })
   readonly property var desks: capture ? capture.desks : set && cfg.sessions[set] ? cfg.sessions[set].workspaces : cfg.workspaces
   readonly property var desk: desks[String(deskWs)] || null
   readonly property var sets: [""].concat(Object.keys(cfg.sessions))
@@ -322,7 +325,7 @@ Item {
   function openDesk(ws) { root.deskWs = ws; root.showPage("desk") }
   function back() {
     if (root.confirming) { if (root.service.phase === "launching") root.host.close(); else root.service.cancelSwitch() }
-    else if (root.page === "desk") { root.pos = root.deskWs - 1; root.showPage("main") }
+    else if (root.page === "desk") { root.pos = root.deskWs === "scratchpad" ? 9 : root.deskWs - 1; root.showPage("main") }
     else if (root.page === "schedule") { root.pos = "sched"; root.showPage("main") }
     else if (root.page === "settings") { root.pos = root.gearHead; root.showPage("main") }
     else if (root.capture) { root.capture = null; root.pos = "head2" }
@@ -354,7 +357,7 @@ Item {
   function activate() {
     if (root.confirming) { if (root.service.pendingPlan && root.service.phase === "") root.service.confirmSwitch(); return }
     if (root.page === "main") {
-      if (typeof root.pos === "number") root.openDesk(root.pos + 1)
+      if (typeof root.pos === "number") root.openDesk(root.wsOf(root.pos))
       else if (root.pos === "sched") root.showPage("schedule")
       else if (root.pos === "save") root.askSave()
       else if (root.capture && root.pos === "head1") root.back()
@@ -377,7 +380,7 @@ Item {
   }
   // Desk ws (1–9) of the edited set loses its apps, scheme and name. The draft clears at
   // once (it's in memory), a saved set after a yes. Open windows stay.
-  property int clearWs: 0
+  property var clearWs: 0
   function askClearDesk(ws) {
     if (Model.isFree(root.desks[String(ws)])) return
     if (root.capture) { root.clearDesk(ws); return }
@@ -398,7 +401,7 @@ Item {
   }
 
   function remove() {
-    if (root.page === "main" && typeof root.pos === "number") { root.askClearDesk(root.pos + 1); return }
+    if (root.page === "main" && typeof root.pos === "number") { root.askClearDesk(root.wsOf(root.pos)); return }
     var r = root.page === "main" ? null : root.rows[root.cursor]
     if (r && r.type === "places") root.setPlace(root.place, "")
     else if (r && r.type === "rule") root.removeRule(r.index)
@@ -439,6 +442,7 @@ Item {
     if (root.page === "schedule") return root.tr("Schedule")
     if (root.page === "desk") {
       var n = root.desk && root.desk.name.mode === "static" ? Model.trimName(root.desk.name.text || "") : ""
+      if (root.deskWs === "scratchpad") return root.tr("Scratchpad")
       return root.tr("Desk %1", root.deskWs) + (n ? " · " + n : "")
     }
     return root.tr("Workspaces")
@@ -514,7 +518,7 @@ Item {
             Keys.onPressed: function(event) {
               var d = { [Qt.Key_Left]: [-1, 0], [Qt.Key_Right]: [1, 0], [Qt.Key_Up]: [0, -1], [Qt.Key_Down]: [0, 1] }[event.key]
               if (!d || !(event.modifiers & Qt.ControlModifier) || keyCatcher.blocked || root.confirming
-                  || root.page !== "main" || typeof root.pos !== "number") return
+                  || root.page !== "main" || typeof root.pos !== "number" || root.pos > 8) return
               event.accepted = true
               var col = root.pos % 3 + d[0], row = Math.floor(root.pos / 3) + d[1]
               if (col < 0 || col > 2 || row < 0 || row > 2) return
@@ -745,7 +749,7 @@ Item {
         id: confirmClear
         anchors.fill: parent
         z: 10
-        message: root.tr("Clear desk %1?", root.clearWs)
+        message: root.clearWs === "scratchpad" ? root.tr("Clear the scratchpad?") : root.tr("Clear desk %1?", root.clearWs)
         cancelText: root.tr("Cancel")
         confirmText: root.tr("Clear")
         foreground: root.fg

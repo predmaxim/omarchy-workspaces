@@ -45,6 +45,8 @@ var TABLES = {
     "Custom": "Своё",
     "Delete": "Удалить",
     "Clear": "Очистить",
+    "Scratchpad": "Скретчпад",
+    "Clear the scratchpad?": "Очистить скретчпад?",
     "Clear desk %1?": "Очистить стол %1?",
     "Clear the desk": "Очистить стол",
     "Delete rule": "Удалить правило",

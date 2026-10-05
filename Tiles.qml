@@ -43,11 +43,11 @@ Column {
     readonly property real tileWidth: (root.width - spacing * 2) / 3
 
     Repeater {
-      model: 9
+      model: 10   // desks 1–9 and the scratchpad under them
       CursorSurface {
         id: tile
         required property int index
-        readonly property int ws: index + 1
+        readonly property var ws: root.panel.wsOf(index)
         readonly property var desk: root.panel.desks[String(ws)] || null
         readonly property bool free: Model.isFree(desk)
         width: grid.tileWidth
@@ -61,11 +61,11 @@ Column {
           id: area
           anchors.fill: parent
           hoverEnabled: true
-          onPressed: function(mouse) { root.dragFrom = mouse.modifiers & Qt.ControlModifier ? tile.index : -1; root.dragTo = -1 }
+          onPressed: function(mouse) { root.dragFrom = mouse.modifiers & Qt.ControlModifier && tile.index < 9 ? tile.index : -1; root.dragTo = -1 }
           onPositionChanged: function(mouse) {
             if (root.dragFrom >= 0) {
               var p = area.mapToItem(grid, mouse.x, mouse.y), t = grid.childAt(p.x, p.y)
-              root.dragTo = t && t.ws !== undefined && t.index !== tile.index ? t.index : -1
+              root.dragTo = t && t.ws !== undefined && t.index !== tile.index && t.index < 9 ? t.index : -1
             } else if (root.panel.gate.moved(area, mouse)) root.panel.pos = tile.index
           }
           property bool dragged: false   // this press was a Ctrl+drag: no click
@@ -87,7 +87,7 @@ Column {
             spacing: Style.space(8)
             Text {
               id: num
-              text: tile.ws
+              text: tile.index === 9 ? root.panel.tr("Scratchpad") : tile.ws
               color: root.panel.fg
               font.family: root.panel.font
               font.pixelSize: Style.font.body

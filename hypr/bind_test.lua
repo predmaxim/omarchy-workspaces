@@ -53,3 +53,13 @@ assert(fr == 1)
 assert(bind.target(two, "f", {}) == "2" and bind.target(two, "f", { ["2"] = 1 }) == "3")
 assert(bind.target(two, "f", { ["2"] = 1, ["3"] = 1 }) == "2" and bind.target(two, "x", {}) == nil)
 print("ok target")
+-- the scratchpad desk: last in order, its rule goes to special:scratchpad
+local sp = config.active(config.parse('{"workspaces":{"scratchpad":{"scheme":"left-right","slots":[{"class":"k"},{"class":"f"}]},"2":{"slots":[{"class":"f"}]}}}'))
+for _, r in ipairs(bind.rules(sp)) do
+  if r.class == "^(k)$" then assert(r.workspace == "special:scratchpad") end
+  if r.class == "^(f)$" then assert(r.workspace == "2") end
+end
+assert(bind.target(sp, "f", { ["2"] = 1 }) == "scratchpad")
+assert(bind.key({ id = -98, name = "special:scratchpad" }) == "scratchpad" and bind.key({ id = 3, name = "3" }) == "3")
+print("ok scratchpad")
+

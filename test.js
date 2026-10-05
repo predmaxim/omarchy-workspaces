@@ -133,7 +133,7 @@ assert.deepStrictEqual(M.rows("desk", rc).map(x => x.type), ["head", "name", "sc
 assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to"])
 // main page cursor
 assert.strictEqual(M.mainMove(4, 1, 0, true), 5); assert.strictEqual(M.mainMove(5, 1, 0, true), 5)
-assert.strictEqual(M.mainMove(1, 0, 1, false), 4); assert.strictEqual(M.mainMove(7, 0, 1, false), 7)
+assert.strictEqual(M.mainMove(1, 0, 1, false), 4); assert.strictEqual(M.mainMove(7, 0, 1, false), 9)
 assert.strictEqual(M.mainMove(1, 0, -1, true), "sched"); assert.strictEqual(M.mainMove(1, 0, -1, false), "head0")
 assert.strictEqual(M.mainMove("sched", 0, -1, true), "head0"); assert.strictEqual(M.mainMove("sched", 0, 1, true), 0)
 assert.strictEqual(M.mainMove("head0", 1, 0, true), "head1"); assert.strictEqual(M.mainMove("head2", 1, 0, true), "head2")
@@ -191,7 +191,9 @@ assert.deepStrictEqual(capm.desks["3"].slots.map(s => s.class), ["a", "b", "c", 
 assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }], ce).desks["4"].scheme, "left-right")
 assert.strictEqual(M.captureDesks([{ class: "a", ws: 4 }, { class: "b", ws: 4 }, { class: "c", ws: 4 }], ce).desks["4"].scheme, "main-left")
 // the capture page: 2 header controls, "save" under the tiles; the main page: 4
-assert.strictEqual(M.mainMove(7, 0, 1, false, 2, true), "save"); assert.strictEqual(M.mainMove("save", 0, -1, false, 2, true), 7)
+assert.strictEqual(M.mainMove(7, 0, 1, false, 2, true), 9); assert.strictEqual(M.mainMove(9, 0, 1, false, 2, true), "save")
+assert.strictEqual(M.mainMove("save", 0, -1, false, 2, true), 9); assert.strictEqual(M.mainMove(9, 0, -1, false, 2, true), 6)
+assert.strictEqual(M.mainMove(9, 0, 1, false, 4), 9); assert.strictEqual(M.mainMove(9, 1, 0, false, 4), 9)
 assert.strictEqual(M.mainMove("head0", 1, 0, false, 2, true), "head1"); assert.strictEqual(M.mainMove("head1", 1, 0, false, 2, true), "head1")
 assert.strictEqual(M.mainMove("head2", 1, 0, true, 4), "head3")
 // no guess by the last segment: org.omarchy.agent is not an "…agent" app
@@ -259,3 +261,11 @@ console.log("ok schemeOf")
 const mr = M.mergeDesks({}, { "3": { scheme: "main-right", slots: ["t", "a", "f", "f"].map(c => ({ app: c, class: c })) } })
 assert.strictEqual(mr.desks["3"].scheme, "main-right"); assert.deepStrictEqual(mr.desks["3"].slots.map(x => x.class), ["t", "a", "f", "f"])
 console.log("ok merge scheme")
+// the scratchpad desk: kept by normalize, last in order, moves go to special:scratchpad
+const sc = M.normalize({ workspaces: { scratchpad: { slots: [{ app: "k", class: "k" }] }, "2": { slots: [{ app: "w", class: "w" }] } } })
+assert.deepStrictEqual(Object.keys(sc.workspaces).sort(), ["2", "scratchpad"])
+const sp = M.sessionPlan(sc, "", "", [{ address: "a", ws: 3, class: "k" }, { address: "z", ws: "scratchpad", class: "zz" }])
+assert.deepStrictEqual(sp.move, [{ addr: "a", ws: "special:scratchpad" }]); assert.deepStrictEqual(sp.launch.map(l => l.ws), ["2"])
+assert.deepStrictEqual(M.sessionPlan(sc, "", "", []).launch.map(l => l.ws), ["2", "scratchpad"])
+assert.deepStrictEqual(M.captureDesks([{ class: "k", ws: "scratchpad" }], [{ id: "k.desktop", name: "K", startupClass: "k" }]).desks.scratchpad.slots[0].class, "k")
+console.log("ok scratchpad")
