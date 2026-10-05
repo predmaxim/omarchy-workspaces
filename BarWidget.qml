@@ -227,7 +227,12 @@ Panel {
           }
         }
 
-        PanelSeparator { width: list.width; foreground: root.fg }
+        // A gap around the line: the sessions apart from the actions.
+        Item {
+          width: list.width
+          height: Style.space(6) * 2 + 1
+          PanelSeparator { width: parent.width; anchors.verticalCenter: parent.verticalCenter; foreground: root.fg }
+        }
 
         Repeater {
           model: root.actionRows
