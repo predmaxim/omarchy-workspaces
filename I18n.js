@@ -6,6 +6,7 @@ var TABLES = {
   ru: {
     "Workspaces": "Рабочие столы",
     "Save": "Сохранить",
+    "Set up sessions": "Настроить сессии",
     "Open windows": "Открытые окна",
     "Now on the desks": "Сейчас на столах",
     "Take the open windows": "Взять открытые окна",

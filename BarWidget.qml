@@ -37,6 +37,8 @@ Panel {
   readonly property var desks: Model.activeDesks(cfg)
   // "" (no session) first, then the sessions.
   readonly property var sessionRows: [""].concat(Object.keys(cfg.sessions))
+  // Under the sessions: take the open windows (the modal's draft), set up the sessions (the modal).
+  readonly property var actionRows: [{ key: "capture", text: tr("Take the open windows") }, { key: "edit", text: tr("Set up sessions") }]
   property int cursor: 0
 
   function workspaceById(id) {
@@ -79,6 +81,12 @@ Panel {
   }
 
   function pickSession(i) {
+    if (i >= sessionRows.length && i < sessionRows.length + actionRows.length) {
+      sessions.open = false
+      root.open()
+      if (actionRows[i - sessionRows.length].key === "capture") Qt.callLater(modal.startCapture)
+      return
+    }
     if (!root.service || i < 0 || i >= sessionRows.length) return
     sessions.open = false
     root.service.requestSession(sessionRows[i])
@@ -156,7 +164,7 @@ Panel {
       id: keyCatcher
       anchors.fill: parent
       onMoveRequested: function(dx, dy) {
-        if (dy) { root.cursor = Math.max(0, Math.min(root.sessionRows.length - 1, root.cursor + dy)); gate.reset() }
+        if (dy) { root.cursor = Math.max(0, Math.min(root.sessionRows.length + root.actionRows.length - 1, root.cursor + dy)); gate.reset() }
       }
       onActivateRequested: root.pickSession(root.cursor)
       onCloseRequested: sessions.open = false
@@ -218,12 +226,52 @@ Panel {
             }
           }
         }
+
+        PanelSeparator { width: list.width; foreground: root.fg }
+
+        Repeater {
+          model: root.actionRows
+
+          CursorSurface {
+            id: action
+            required property var modelData
+            required property int index
+            readonly property int row: root.sessionRows.length + index
+            width: list.width
+            implicitHeight: actionLabel.implicitHeight + Style.spacing.xl
+            foreground: root.fg
+            hasCursor: root.cursor === row
+
+            MouseArea {
+              id: actionArea
+              anchors.fill: parent
+              hoverEnabled: true
+              cursorShape: Qt.PointingHandCursor
+              onPositionChanged: function(mouse) { if (gate.moved(actionArea, mouse)) root.cursor = action.row }
+              onClicked: root.pickSession(action.row)
+            }
+
+            Text {
+              id: actionLabel
+              anchors.left: parent.left
+              anchors.leftMargin: Style.space(8)
+              anchors.right: parent.right
+              anchors.verticalCenter: parent.verticalCenter
+              text: action.modelData.text
+              color: root.fg
+              font.family: root.fontFamily
+              font.pixelSize: Style.font.body
+              elide: Text.ElideRight
+            }
+          }
+        }
       }
     }
   }
 
   // The settings modal and the session switch confirmation.
   Local.Panel {
+    id: modal
     host: root
     service: root.service
     screen: root.QsWindow.window ? root.QsWindow.window.screen : null
