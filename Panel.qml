@@ -35,6 +35,9 @@ Item {
   property int cursor: 1           // list pages: the row
   property int place: 0            // desk page: the place under the cursor
   property bool adding: false      // the new session's name field in the header
+  property bool renaming: false    // the same field renames the session
+  // Header controls: set ▾, ▶, snapshot, then for a session ✎ and delete, the gear last.
+  readonly property string gearHead: set !== "" ? "head5" : "head3"
   property bool confirming: false
   property string switchTo: ""
   property var draft: ({ days: [], from: "", to: "" })
@@ -59,7 +62,7 @@ Item {
                                          free: tr("Only free"), all: tr("All"), off: tr("Don't collapse"),
                                          number: tr("Number"), dynamic: tr("By window"), static: tr("Custom"),
                                          focus: tr("Focus"), ask: tr("Ask"), replace: tr("Replace") })
-  readonly property var rowLabels: ({ places: tr("Apps by place"), deleteSession: tr("Delete session"), rename: tr("Rename session"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
+  readonly property var rowLabels: ({ places: tr("Apps by place"), days: tr("Days"), from: tr("From"), to: tr("To"), name: tr("Name"), scheme: tr("Scheme"),
                                       addRule: tr("One app window"), foreignWindow: tr("Foreign window on a laid-out desk"),
                                       collapse: tr("Collapsing without a session"), collapseInSession: tr("Collapsing in a session"),
                                       sequentialLaunch: tr("Launch one by one"), schedule_: tr("Scheduled session at login"),
@@ -87,7 +90,7 @@ Item {
       Qt.callLater(function() { keyCatcher.forceActiveFocus() })
     } else if (confirming && service && service.phase === "") service.cancelSwitch()
   }
-  onSetChanged: { loadDraft(); setHint = ""; renameHint = "" }
+  onSetChanged: { loadDraft(); setHint = ""; renameHint = ""; renaming = false; if (pos === "head3" || pos === "head4" || pos === "head5") pos = gearHead }
   onPageChanged: flick.contentY = 0
   onSetsChanged: if (sets.indexOf(set) < 0) set = ""
   onRowsChanged: if (cursor >= rows.length) cursor = Math.max(0, rows.length - 1)
@@ -314,19 +317,20 @@ Item {
     root.cursor = Math.max(0, Math.min(root.rows.length - 1, root.cursor + dy))
     pointerGate.reset()
   }
-  function showPage(p) { root.adding = false; root.page = p; root.cursor = 1; root.place = 0 }
+  function startRename() { root.setHint = ""; root.renameHint = ""; root.renaming = true; root.focusNameField() }
+  function showPage(p) { root.adding = false; root.renaming = false; root.page = p; root.cursor = 1; root.place = 0 }
   function openDesk(ws) { root.deskWs = ws; root.showPage("desk") }
   function back() {
     if (root.confirming) { if (root.service.phase === "launching") root.host.close(); else root.service.cancelSwitch() }
     else if (root.page === "desk") { root.pos = root.deskWs - 1; root.showPage("main") }
     else if (root.page === "schedule") { root.pos = "sched"; root.showPage("main") }
-    else if (root.page === "settings") { root.pos = "head3"; root.showPage("main") }
+    else if (root.page === "settings") { root.pos = root.gearHead; root.showPage("main") }
     else if (root.capture) { root.capture = null; root.pos = "head2" }
     else root.host.close()
   }
   function arrow(dx, dy) {
     if (root.page === "main") {
-      root.pos = Model.mainMove(root.pos, dx, dy, root.set !== "" && !root.capture, root.capture ? 2 : 4, !!root.capture)
+      root.pos = Model.mainMove(root.pos, dx, dy, root.set !== "" && !root.capture, root.capture ? 2 : Number(root.gearHead.slice(4)) + 1, !!root.capture)
       pointerGate.reset(); return
     }
     var r = root.rows[root.cursor]
@@ -356,7 +360,9 @@ Item {
       else if (root.capture && root.pos === "head1") root.back()
       else if (root.pos === "head1") root.launchSet()
       else if (root.pos === "head2") root.startCapture()
-      else if (root.pos === "head3") root.showPage("settings")
+      else if (root.pos === root.gearHead) root.showPage("settings")
+      else if (root.pos === "head3") root.startRename()
+      else if (root.pos === "head4") root.askDelete()
       else if (root.adding) root.focusNameField()
       else if (root.setPicker) root.setPicker.open()
       return
@@ -364,9 +370,8 @@ Item {
     var i = root.cursor, r = root.rows[i]
     if (!r) return
     if (r.type === "head") root.back()
-    else if (r.type === "deleteSession") root.askDelete()
     else if (r.type === "days") root.toggleDay(root.dayCursor + 1)
-    else if (["from", "to", "places", "addRule", "rename"].indexOf(r.type) >= 0) root.pressRow(i)
+    else if (["from", "to", "places", "addRule"].indexOf(r.type) >= 0) root.pressRow(i)
     else if (r.type === "name" && root.desk && root.desk.name.mode === "static") root.pressRow(i)
     else root.change(i, 1)
   }
@@ -488,7 +493,7 @@ Item {
           if (confirmDelete.opened) event.accepted = confirmDelete.handleKey(event)
           else if (confirmClear.opened) event.accepted = confirmClear.handleKey(event)
           else if (confirmOverwrite.opened) event.accepted = confirmOverwrite.handleKey(event)
-          else if (event.key === Qt.Key_Escape) { root.adding = false; keyCatcher.forceActiveFocus(); event.accepted = true }
+          else if (event.key === Qt.Key_Escape) { root.adding = false; root.renaming = false; root.renameHint = ""; keyCatcher.forceActiveFocus(); event.accepted = true }
         }
 
         PanelKeyCatcher {
@@ -552,7 +557,7 @@ Item {
                 Dropdown {
                   id: setDropdown
                   anchors.verticalCenter: parent.verticalCenter
-                  visible: root.page === "main" && !root.adding
+                  visible: root.page === "main" && !root.adding && !root.renaming
                   width: Style.space(180)
                   showLabel: false
                   options: root.sets.map(function(n) { return { value: n, label: n || root.tr("Regular") } })
@@ -569,14 +574,18 @@ Item {
                 TextField {
                   id: nameField
                   anchors.verticalCenter: parent.verticalCenter
-                  visible: root.page === "main" && root.adding
+                  visible: root.page === "main" && (root.adding || root.renaming)
                   width: Style.space(180)
                   placeholderText: root.tr("Session name")
                   foreground: root.fg
                   font.family: root.font
                   font.pixelSize: Style.font.body
-                  onVisibleChanged: if (visible) forceActiveFocus()
-                  onAccepted: { if (root.capture) root.saveCapture(text, true); else root.addSession(text); text = "" }
+                  onVisibleChanged: if (visible) { text = root.renaming ? root.set : ""; forceActiveFocus(); selectAll() }
+                  onAccepted: {
+                    if (root.renaming) { if (root.renameSet(text)) { root.renaming = false; root.focusKeys() } return }
+                    if (root.capture) root.saveCapture(text, true); else root.addSession(text)
+                    text = ""
+                  }
                   Connections { target: root; function onFocusNameField() { nameField.forceActiveFocus() } }
                 }
                 IconButton {
@@ -597,16 +606,42 @@ Item {
                   onClicked: { root.pos = "head2"; root.startCapture() }
                 }
                 IconButton {
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.page === "main" && !root.capture && root.set !== ""
+                  iconText: "󰏫"
+                  tooltipText: root.tr("Rename session")
+                  hasCursor: root.pos === "head3"
+                  onClicked: { root.pos = "head3"; root.startRename() }
+                }
+                IconButton {
+                  anchors.verticalCenter: parent.verticalCenter
+                  visible: root.page === "main" && !root.capture && root.set !== ""
+                  iconText: "󰩺"
+                  tooltipText: root.tr("Delete session")
+                  hasCursor: root.pos === "head4"
+                  onClicked: { root.pos = "head4"; root.askDelete() }
+                }
+                IconButton {
                   readonly property bool back: root.page !== "main" || root.capture !== null
                   anchors.verticalCenter: parent.verticalCenter
                   iconText: back ? "󰁍" : "󰒓"
                   tooltipText: back ? root.tr("Back") : root.tr("Settings")
-                  hasCursor: root.page !== "main" ? root.cursor === 0 : root.pos === (root.capture ? "head1" : "head3")
+                  hasCursor: root.page !== "main" ? root.cursor === 0 : root.pos === (root.capture ? "head1" : root.gearHead)
                   onClicked: { if (back) root.back(); else root.showPage("settings") }
                 }
               }
             }
 
+            // Why the rename or the delete didn't go.
+            Text {
+              visible: root.page === "main" && text !== ""
+              width: head.width
+              text: root.renameHint || root.setHint
+              color: Color.urgent
+              font.family: root.font
+              font.pixelSize: Style.font.caption
+              wrapMode: Text.WordWrap
+            }
             Text {
               visible: !root.confirming && root.service && root.service.loadError !== ""
               width: head.width

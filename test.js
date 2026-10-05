@@ -130,7 +130,7 @@ assert.strictEqual(M.renameSession(rr, "A", "C", "Обычные").error, "exist
 const rc = M.normalize({ singleInstance: [{ class: "a" }] })
 assert.deepStrictEqual(M.rows("settings", rc).map(x => x.type), ["head", "choice", "choice", "choice", "switch", "switch", "switch", "rule", "addRule"])
 assert.deepStrictEqual(M.rows("desk", rc).map(x => x.type), ["head", "name", "scheme", "places"])
-assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to", "rename", "deleteSession"])
+assert.deepStrictEqual(M.rows("schedule", rc).map(x => x.type), ["head", "days", "from", "to"])
 // main page cursor
 assert.strictEqual(M.mainMove(4, 1, 0, true), 5); assert.strictEqual(M.mainMove(5, 1, 0, true), 5)
 assert.strictEqual(M.mainMove(1, 0, 1, false), 4); assert.strictEqual(M.mainMove(7, 0, 1, false), 7)

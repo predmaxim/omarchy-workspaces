@@ -69,8 +69,7 @@ CursorSurface {
     Text {
       visible: text !== ""
       width: parent.width
-      text: row.modelData.type === "to" ? row.panel.scheduleError : row.modelData.type === "deleteSession" ? row.panel.setHint
-          : row.modelData.type === "rename" ? row.panel.renameHint : ""
+      text: row.modelData.type === "to" ? row.panel.scheduleError : ""
       color: Color.urgent
       font.family: row.panel.font
       font.pixelSize: Style.font.caption
@@ -88,7 +87,7 @@ CursorSurface {
     anchors.left: row.wide ? parent.left : undefined
     anchors.leftMargin: Style.spacing.rowPaddingX
     sourceComponent: ({ days: daysControl, from: timeControl, to: timeControl, name: nameControl, scheme: schemeControl,
-                        places: placesControl, deleteSession: deleteControl, rename: renameControl, choice: choiceControl, switch: switchControl,
+                        places: placesControl, choice: choiceControl, switch: switchControl,
                         rule: ruleControl, addRule: addRuleControl })[row.modelData.type] || null
 
     Component {
@@ -220,26 +219,6 @@ CursorSurface {
           }
           onPopupOpenChanged: if (!popupOpen) Qt.callLater(function() { row.panel.focusKeys() })
         }
-      }
-    }
-    Component {
-      id: renameControl
-      // Enter — type the new name, Enter saves, Esc (losing focus) puts the old one back.
-      Field {
-        function press() { forceActiveFocus(); selectAll() }
-        width: Style.space(200)
-        maximumLength: 50
-        text: row.panel.set
-        onAccepted: if (row.panel.renameSet(text)) row.panel.focusKeys()
-        onActiveFocusChanged: if (!activeFocus) { text = row.panel.set; row.panel.renameHint = "" }
-      }
-    }
-    Component {
-      id: deleteControl
-      IconButton {
-        iconText: "󰩺"
-        tooltipText: row.panel.tr("Delete session")
-        onClicked: row.panel.askDelete()
       }
     }
     Component {

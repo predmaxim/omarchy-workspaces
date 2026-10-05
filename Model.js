@@ -430,7 +430,7 @@ var ACTIONS = ["focus", "ask", "replace"]
 // The main page is the 3×3 tiles (mainMove).
 function rows(page, c) {
   if (page === "desk") return [{ type: "head" }, { type: "name" }, { type: "scheme" }, { type: "places" }]
-  if (page === "schedule") return [{ type: "head" }, { type: "days" }, { type: "from" }, { type: "to" }, { type: "rename" }, { type: "deleteSession" }]
+  if (page === "schedule") return [{ type: "head" }, { type: "days" }, { type: "from" }, { type: "to" }]
   var out = [{ type: "head" }]
   ;["foreignWindow", "collapse", "collapseInSession"].forEach(function(k) { out.push({ type: "choice", key: k }) })
   ;["sequentialLaunch", "schedule", "hideNoSession"].forEach(function(k) { out.push({ type: "switch", key: k }) })
