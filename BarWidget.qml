@@ -2,6 +2,7 @@ import QtQuick
 import QtQuick.Layouts
 import Quickshell
 import Quickshell.Hyprland
+import Quickshell.Io
 import qs.Commons
 import qs.Ui
 import "Model.js" as Model
@@ -282,6 +283,15 @@ Panel {
           }
         }
       }
+    }
+  }
+
+  // The session list from a hotkey (the bar's own target is taken by the modal).
+  IpcHandler {
+    target: "predmaxim.workspaces-sessions"
+    function toggle(): void {
+      root.cursor = Math.max(0, root.sessionRows.indexOf(root.session))
+      sessions.open = !sessions.open
     }
   }
 
