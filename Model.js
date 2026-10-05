@@ -281,6 +281,27 @@ function swapMoves(c, active, windows, a, b) {
   }).map(function(w) { return { addr: w.address, ws: Number(cls[w.class]) } })
 }
 
+// The draft for an existing set: its desks (`setDesks`, normalized) with the captured
+// windows (`captured`, captureDesks().desks) added — an app the set has stays where it
+// is; a new one takes a free place of its desk, the scheme grows to fit (up to the
+// grid); what doesn't fit goes to `lost` (classes).
+function mergeDesks(setDesks, captured) {
+  var desks = JSON.parse(JSON.stringify(setDesks || {})), lost = [], have = classesOf(desks)
+  Object.keys(captured || {}).forEach(function(ws) {
+    captured[ws].slots.forEach(function(s) {
+      if (!s || have[s.class] !== undefined) return
+      var d = desks[ws] = desks[ws] || { scheme: "single", slots: [], name: { mode: "number" } }
+      var i = 0
+      while (d.slots[i]) i++
+      while (i >= PLACES[d.scheme] && d.scheme !== "grid") d.scheme = SCHEME_FOR[PLACES[d.scheme] + 1]
+      if (i >= PLACES[d.scheme]) return lost.push(s.class)
+      d.slots[i] = s
+      have[s.class] = ws
+    })
+  })
+  return { desks: desks, lost: lost }
+}
+
 // ------------------------------------------------------------ the modal
 
 var NAME_MODES = ["number", "dynamic", "static"]

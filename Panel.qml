@@ -43,7 +43,7 @@ Item {
   property string renameHint: ""   // why the new name doesn't fit
   property int dayCursor: 0        // the day under the cursor in the days row
   property var setPicker: null     // the header's set Dropdown
-  property var capture: null       // the open windows as a draft set: {desks, lost} (Model.captureDesks)
+  property var capture: null       // the draft: {desks, lost, taken} — taken: Model.captureDesks of the open windows
   property string target: ""       // where the draft goes: a set or newSet
   property string captureHint: ""  // why the draft can't go under that name
 
@@ -149,7 +149,7 @@ Item {
   function swapDesks(a, b) {
     if (a === b || !root.service || root.service.loadError !== "") return
     if (root.capture) {
-      root.capture = { desks: Model.swapDesks({ workspaces: root.capture.desks }, "", a, b).workspaces, lost: root.capture.lost }
+      root.capture = Object.assign({}, root.capture, { desks: Model.swapDesks({ workspaces: root.capture.desks }, "", a, b).workspaces })
       return
     }
     var set = root.set
@@ -207,11 +207,19 @@ Item {
     id: captureTimer
     interval: 300
     onTriggered: {
-      root.capture = Model.captureDesks(root.service.windowsNow(), DesktopEntries.applications.values)
       root.target = root.set
-      root.captureHint = ""
+      root.draftFor(Model.captureDesks(root.service.windowsNow(), DesktopEntries.applications.values))
       root.pos = 0
     }
+  }
+  // The draft for the target: an existing set with apps — its desks plus the new windows
+  // (Model.mergeDesks); a new or empty one — the open windows alone. Edits of the draft
+  // go when the target changes.
+  function draftFor(taken) {
+    var t = root.target === root.newSet ? null : root.target ? (root.cfg.sessions[root.target] || {}).workspaces : root.cfg.workspaces
+    var m = t && Object.keys(Model.classesOf(t)).length ? Model.mergeDesks(t, taken.desks) : { desks: taken.desks, lost: [] }
+    root.capture = { desks: m.desks, lost: taken.lost.concat(m.lost), taken: taken }
+    root.captureHint = ""
   }
   // Draft places whose app the target set doesn't have yet; none when the set is new or empty.
   function newMarks(d) {
@@ -226,7 +234,7 @@ Item {
     if (root.target === root.newSet) { root.adding = true; root.focusNameField() }
     else confirmOverwrite.opened = true
   }
-  // The draft becomes set `name` ("" — the regular desks) from scratch (its schedule stays)
+  // The draft becomes set `name` ("" — the regular desks; its schedule stays)
   // and the set in force: its windows are already open, nothing to launch.
   function saveCapture(name, isNew) {
     name = name.trim()
@@ -369,7 +377,7 @@ Item {
   // The set switcher: a session, or "+ New session" → the name field.
   readonly property string newSet: "\u0001new"
   function pickSet(v) {
-    if (root.capture) { root.target = v; root.captureHint = "" }
+    if (root.capture) { root.target = v; root.draftFor(root.capture.taken) }
     else if (v === root.newSet) root.adding = true
     else root.set = v
   }
@@ -664,9 +672,9 @@ Item {
         id: confirmOverwrite
         anchors.fill: parent
         z: 10
-        message: root.tr("Rewrite %1 from scratch with the open windows?", root.target || root.tr("Regular"))
+        message: root.tr("Save the open windows to %1?", root.target || root.tr("Regular"))
         cancelText: root.tr("Cancel")
-        confirmText: root.tr("Rewrite")
+        confirmText: root.tr("Save")
         foreground: root.fg
         fontFamily: root.font
         onCanceled: { opened = false; keyCatcher.forceActiveFocus() }

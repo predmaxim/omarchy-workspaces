@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks }")()
 
 const c = M.normalize({})
 assert.strictEqual(c.foreignWindow, "tile"); assert.strictEqual(c.collapse, "free")
@@ -192,4 +192,10 @@ assert.strictEqual(M.mainMove("head2", 1, 0, true, 4), "head3")
 // no guess by the last segment: org.omarchy.agent is not an "…agent" app
 assert.deepStrictEqual(M.captureDesks([{ class: "org.omarchy.agent", ws: 1 }], [{ id: "ideco.desktop", name: "Ideco", startupClass: "com.ideco.agent" }]),
   { desks: {}, lost: ["org.omarchy.agent"] })
+// merge: the set's apps stay, new ones take free places, the scheme grows, overflow is lost
+const md = M.normalize({ workspaces: { "1": { slots: [{ app: "y", class: "y" }] }, "2": { scheme: "grid", slots: [{ class: "a" }, { class: "b" }, { class: "c" }, { class: "d" }] } } }).workspaces
+const mg = M.mergeDesks(md, { "1": { slots: [{ class: "n" }, { class: "a" }] }, "2": { slots: [{ class: "m" }] }, "3": { slots: [{ class: "k" }] } })
+assert.strictEqual(mg.desks["1"].scheme, "left-right"); assert.deepStrictEqual(mg.desks["1"].slots.map(x => x.class), ["y", "n"])
+assert.deepStrictEqual(mg.desks["3"].slots.map(x => x.class), ["k"]); assert.deepStrictEqual(mg.lost, ["m"])
+assert.strictEqual(md["1"].slots.length, 1)   // the input is untouched
 console.log("ok")
