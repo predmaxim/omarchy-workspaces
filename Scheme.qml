@@ -4,13 +4,15 @@ import qs.Commons
 import "Model.js" as Model
 
 // A drawing of a desk scheme (Model.geometry): filled places show `labels[i]`
-// (an app name) and `subs[i]` under it; empty ones are outlined with `emptyText`.
+// (an app name) and `subs[i]` under it; empty ones are outlined with `emptyText`;
+// `marks[i]` paints a place in the accent (a window new to the set it's saved to).
 // Tiles, the scheme picker and the desk page's places use it.
 Item {
   id: root
   property string scheme: "single"
   property var labels: []
   property var subs: []
+  property var marks: []
   property string emptyText: "+"
   property int cursor: -1          // the place under the keyboard cursor
   property color foreground: Color.foreground
@@ -31,9 +33,10 @@ Item {
       width: modelData.w * root.width - root.gap
       height: modelData.h * root.height - root.gap
       radius: Style.space(3)
-      color: filled ? Util.alpha(root.foreground, 0.16) : "transparent"
-      border.width: root.cursor === index ? Math.max(2, Style.space(2)) : 0
-      border.color: root.foreground
+      readonly property bool marked: filled && !!root.marks[index]
+      color: marked ? Util.alpha(Color.accent, 0.3) : filled ? Util.alpha(root.foreground, 0.16) : "transparent"
+      border.width: root.cursor === index ? Math.max(2, Style.space(2)) : marked ? 1 : 0
+      border.color: marked && root.cursor !== index ? Color.accent : root.foreground
 
       // Empty place: dashed outline.
       Shape {

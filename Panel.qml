@@ -197,15 +197,29 @@ Item {
     else root.service.requestSession(root.set)
   }
   // «Take the open windows»: a draft of the desks as they are now, saved only on «Save».
+  // refreshToplevels is asynchronous (classes come later): read after it settles, like the service.
   function startCapture() {
     if (!root.service) return
     Hyprland.refreshToplevels()
-    Qt.callLater(function() {
+    captureTimer.restart()
+  }
+  Timer {
+    id: captureTimer
+    interval: 300
+    onTriggered: {
       root.capture = Model.captureDesks(root.service.windowsNow(), DesktopEntries.applications.values)
       root.target = root.set
       root.captureHint = ""
       root.pos = 0
-    })
+    }
+  }
+  // Draft places whose app the target set doesn't have yet; none when the set is new or empty.
+  function newMarks(d) {
+    if (!root.capture || !d || root.target === root.newSet) return []
+    var t = root.target ? (root.cfg.sessions[root.target] || {}).workspaces || {} : root.cfg.workspaces
+    var cls = Model.classesOf(t)
+    if (!Object.keys(cls).length) return []
+    return d.slots.map(function(s) { return !!s && cls[s.class] === undefined })
   }
   // A new session asks its name; an existing set is rewritten only after a yes.
   function askSave() {

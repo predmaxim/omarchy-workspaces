@@ -108,6 +108,7 @@ Column {
             height: parent.height - num.height - parent.spacing
             scheme: tile.desk ? tile.desk.scheme : "single"
             labels: tile.free ? [] : root.panel.appNames(tile.desk)
+            marks: root.panel.newMarks(tile.desk)
             emptyText: tile.free ? root.panel.tr("free") : "+"
             foreground: root.panel.fg
             fontFamily: root.panel.font
