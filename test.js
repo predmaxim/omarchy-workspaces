@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks, schemeOf, singleGroup, appClass, entryOf }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, loginSession, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks, schemeOf, singleGroup, appClass, entryOf }")()
 
 // Desks as the active session "S" — the empty session ("") has none.
 const inS = (ws, extra) => M.normalize(Object.assign({ activeSession: "S", sessions: { S: { workspaces: ws } } }, extra))
@@ -24,6 +24,12 @@ assert.strictEqual(M.scheduleAt(cfg, new Date(2026, 9, 6, 9, 0)), "Работа"
 assert.strictEqual(M.scheduleAt(cfg, new Date(2026, 9, 6, 18, 0)), "")        // 18:00 — уже нет
 assert.strictEqual(M.scheduleAt(cfg, new Date(2026, 9, 4, 10, 0)), "")        // Вс
 assert.strictEqual(M.scheduleAt(M.normalize({ schedule: false, sessions: cfg.sessions }), new Date(2026, 9, 6, 10, 0)), "")
+// At login: the scheduled session; out of its time a scheduled one ends, an unscheduled one stays.
+const work = (extra) => M.normalize(Object.assign({ sessions: { "Работа": cfg.sessions["Работа"], "Дом": {} } }, extra))
+assert.strictEqual(M.loginSession(work({ activeSession: "" }), new Date(2026, 9, 6, 10, 0)), "Работа")
+assert.strictEqual(M.loginSession(work({ activeSession: "Работа" }), new Date(2026, 9, 6, 21, 0)), "")
+assert.strictEqual(M.loginSession(work({ activeSession: "Дом" }), new Date(2026, 9, 6, 21, 0)), "Дом")
+assert.strictEqual(M.loginSession(work({ activeSession: "Работа", schedule: false }), new Date(2026, 9, 6, 21, 0)), "Работа")
 
 assert.deepStrictEqual(M.overlaps({
   A: { schedule: { days: [1], from: "09:00", to: "12:00" } },

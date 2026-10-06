@@ -209,6 +209,14 @@ function scheduleAt(c, date) {
   return ""
 }
 
+// The session to be in force at login: the scheduled one; out of every schedule
+// a scheduled session has ended (the empty session), an unscheduled one stays.
+function loginSession(c, date) {
+  var name = scheduleAt(c, date), a = c.activeSession
+  if (name || !c.schedule) return name || a
+  return c.sessions[a] && c.sessions[a].schedule ? "" : a
+}
+
 function overlaps(sessions) {
   var names = Object.keys(sessions), out = []
   for (var i = 0; i < names.length; i++) for (var j = i + 1; j < names.length; j++) {

@@ -36,11 +36,11 @@ Item {
       try {
         root.raw = JSON.parse(text()); root.loadError = ""
         // At login (the shell starts with the session): the scheduled session, once,
-        // after the first successful read.
+        // after the first successful read; a scheduled one past its time ends.
         if (!root.scheduleChecked) {
           root.scheduleChecked = true
-          var name = Model.scheduleAt(root.cfg, new Date())
-          if (name && name !== root.cfg.activeSession) root.requestSession(name)
+          var name = Model.loginSession(root.cfg, new Date())
+          if (name !== root.cfg.activeSession) root.requestSession(name)
           else root.launchActive()   // already in force: its apps still have to start
         }
       } catch (e) {
