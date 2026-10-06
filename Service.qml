@@ -128,7 +128,7 @@ Item {
     // Can't record the session over a broken file: say so (a scheduled switch has no modal).
     if (root.loadError !== "") {
       Quickshell.execDetached(["omarchy-notification-send", "-u", "normal", root.tr("Workspaces"),
-                               root.tr("config.json is broken — session %1 not started", root.pendingPlan.to || root.tr("No session"))])
+                               root.tr("config.json is broken — session %1 not started", root.pendingPlan.to || root.tr("Empty session"))])
       root.cancelSwitch(); return
     }
     root.phase = "udisks"
@@ -243,7 +243,7 @@ Item {
     if (root.busy() || launchTimer.running) return
     if (root.loadError !== "") {
       Quickshell.execDetached(["omarchy-notification-send", "-u", "normal", root.tr("Workspaces"),
-                               root.tr("config.json is broken — session %1 not started", root.cfg.activeSession || root.tr("No session"))])
+                               root.tr("config.json is broken — session %1 not started", root.cfg.activeSession || root.tr("Empty session"))])
       return
     }
     Hyprland.refreshToplevels()

@@ -108,7 +108,7 @@ Panel {
       id: sessionButton
       visible: root.session !== "" || !root.cfg.hideNoSession
       bar: root.bar
-      text: (root.session || root.tr("No session")) + " ▾"
+      text: (root.session || root.tr("Empty session")) + " ▾"
       horizontalMargin: 6
       verticalPadding: 6
       fixedHeight: root.barSize
@@ -207,7 +207,7 @@ Panel {
               anchors.right: mark.left
               anchors.verticalCenter: parent.verticalCenter
               textFormat: Text.PlainText
-              text: item.modelData === "" ? root.tr("No session") : item.modelData
+              text: item.modelData === "" ? root.tr("Empty session") : item.modelData
               color: root.fg
               font.family: root.fontFamily
               font.pixelSize: Style.font.body

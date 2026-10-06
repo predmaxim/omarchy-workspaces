@@ -13,8 +13,9 @@ c = config.parse([[{"workspaces":{"1":{"scheme":"left-right","slots":[{"app":"a.
 local act = config.active(c)
 assert(act["2"] and act["2"].slots[1].class == "b" and act["1"] == nil, "session replaces plain desks")
 c.activeSession = "Нет такой"
-assert(config.active(c)["1"], "missing session -> plain desks")
-local s = config.parse('{"workspaces":{"1":{"scheme":"single","slots":[{"class":"a"},{"class":"b"}]}}}')
+assert(next(config.active(c)) == nil, "missing session -> the empty session")
+assert(next(c.workspaces) == nil, "plain desks aren't read: the empty session is always empty")
+local s = config.parse('{"sessions":{"S":{"workspaces":{"1":{"scheme":"single","slots":[{"class":"a"},{"class":"b"}]}}}}}').sessions.S
 assert(s.workspaces["1"].slots[1].class == "a" and s.workspaces["1"].slots[2] == nil, "slots cut to the scheme's places")
 local bad, err = config.parse("{")
 assert(bad == nil and err)

@@ -2,7 +2,9 @@
 local dir = arg[0]:match("(.*/)") or "./"; dofile(dir .. "prefix.lua")(dir)
 local config = require("predmaxim_workspaces.config")
 local bind = require("predmaxim_workspaces.bind")
-local cfg = config.parse([[{"workspaces":{
+-- The desks in force are a session's: the empty session has none.
+local function session(json) return config.parse('{"activeSession":"S","sessions":{"S":' .. json .. '}}') end
+local cfg = session([[{"workspaces":{
   "1":{"scheme":"main-left","slots":[{"class":"code"},{"class":"firefox"},{"class":"foot"}]},
   "2":{"scheme":"single","slots":[{"class":"chrome-x.y__-Default"}]}}}]])
 local desks = config.active(cfg)
@@ -24,7 +26,7 @@ local f = bind.foreign(cfg, desks, "1", { 1, 2, 3 })
 assert(f.action == "move" and f.workspace == 4, "first free desk without bindings")
 assert(bind.foreign(cfg, desks, "5", {}).action == "tile", "desk without a scheme keeps it")
 assert(bind.foreign(cfg, desks, "2", {}).action == "tile", "single desk keeps it")
-local one = config.active(config.parse('{"workspaces":{"3":{"scheme":"left-right","slots":[{"class":"a"}]}}}'))
+local one = config.active(session('{"workspaces":{"3":{"scheme":"left-right","slots":[{"class":"a"}]}}}'))
 assert(bind.foreign(cfg, one, "3", {}).action == "move", "scheme with one bound place still guards it")
 -- place_cmds: exact strings as per controller decision
 assert(#bind.place_cmds("single", 1, 1) == 0)
@@ -39,14 +41,14 @@ assert(bind.layout("main-right").layout == "dwindle")
 assert(bind.place_cmds("main-right", 1, 4)[1] == "preselect l" and bind.place_cmds("main-right", 2, 4)[1] == "preselect r")
 assert(bind.place_cmds("main-right", 3, 4)[1] == "preselect d" and #bind.place_cmds("main-right", 4, 4) == 0)
 -- holes: [null, A] on left-right → A is place 2
-local holes = config.active(config.parse('{"workspaces":{"4":{"scheme":"left-right","slots":[null,{"app":"a.desktop","class":"a"}]}}}'))
+local holes = config.active(session('{"workspaces":{"4":{"scheme":"left-right","slots":[null,{"app":"a.desktop","class":"a"}]}}}'))
 assert(holes["4"].slots[1] == nil and holes["4"].slots[2].class == "a", "hole kept")
 assert(bind.slot(holes["4"], "a", {}) == 2, "A keeps place 2")
 assert(#bind.rules(holes) == 1 and bind.rules(holes)[1].workspace == "4")
 print("bind ok")
 
 -- an app on two desks: one rule (first desk); new windows fill the desks in order
-local two = config.active(config.parse('{"workspaces":{"3":{"slots":[{"class":"f"}]},"2":{"scheme":"left-right","slots":[{"class":"w"},{"class":"f"}]}}}'))
+local two = config.active(session('{"workspaces":{"3":{"slots":[{"class":"f"}]},"2":{"scheme":"left-right","slots":[{"class":"w"},{"class":"f"}]}}}'))
 local fr = 0
 for _, r in ipairs(bind.rules(two)) do if r.class == "^(f)$" then fr = fr + 1; assert(r.workspace == "2") end end
 assert(fr == 1)
@@ -54,7 +56,7 @@ assert(bind.target(two, "f", {}) == "2" and bind.target(two, "f", { ["2"] = 1 })
 assert(bind.target(two, "f", { ["2"] = 1, ["3"] = 1 }) == "2" and bind.target(two, "x", {}) == nil)
 print("ok target")
 -- the scratchpad desk: last in order, its rule goes to special:scratchpad
-local sp = config.active(config.parse('{"workspaces":{"scratchpad":{"scheme":"left-right","slots":[{"class":"k"},{"class":"f"}]},"2":{"slots":[{"class":"f"}]}}}'))
+local sp = config.active(session('{"workspaces":{"scratchpad":{"scheme":"left-right","slots":[{"class":"k"},{"class":"f"}]},"2":{"slots":[{"class":"f"}]}}}'))
 for _, r in ipairs(bind.rules(sp)) do
   if r.class == "^(k)$" then assert(r.workspace == "special:scratchpad") end
   if r.class == "^(f)$" then assert(r.workspace == "2") end

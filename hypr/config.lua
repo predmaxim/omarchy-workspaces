@@ -39,7 +39,7 @@ function M.parse(text)
     elseif type(r) == type(v) then c[k] = r else c[k] = v end
   end
   c.singleInstance = type(raw.singleInstance) == "table" and raw.singleInstance or {}
-  c.workspaces = desks(raw.workspaces)
+  c.workspaces = {} -- the empty session: always empty, config's plain desks aren't read
   c.sessions = {}
   for name, s in pairs(type(raw.sessions) == "table" and raw.sessions or {}) do
     if type(s) == "table" then c.sessions[name] = { workspaces = desks(s.workspaces), schedule = s.schedule } end

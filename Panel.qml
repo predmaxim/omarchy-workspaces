@@ -29,7 +29,9 @@ Item {
   readonly property string font: Style.font.family
 
   property string page: "main"     // main | desk | schedule | settings
-  property string set: ""          // "" — plain desks, else a session
+  property string set: ""          // "" — the empty session, else a session
+  // The empty session has nothing to edit: no tiles, the cursor stays in the header.
+  readonly property bool locked: set === "" && !capture
   property var deskWs: 1           // the desk page's desk: 1–9 or "scratchpad"
   function wsOf(pos) { return pos === 9 ? "scratchpad" : pos + 1 }   // a tile's desk
   property var pos: 0              // main page cursor (Model.mainMove)
@@ -131,6 +133,7 @@ Item {
   }
   // apply: the 1-based place that changed — on the desks in force, launch/move at once.
   function editDesk(fn, apply) {
+    if (root.locked) return
     var deskWs = root.deskWs
     var ws = String(root.deskWs)
     // The draft of open windows lives in memory until it's saved.
@@ -141,8 +144,7 @@ Item {
       return
     }
     root.edit(function(next) {
-      var ds = root.set ? (next.sessions[root.set].workspaces = next.sessions[root.set].workspaces || {})
-                        : (next.workspaces = next.workspaces || {})
+      var ds = next.sessions[root.set].workspaces = next.sessions[root.set].workspaces || {}
       fn(ds[ws] = ds[ws] || { scheme: "single", slots: [], name: { mode: "number" } })
     }, function(ok) {
       // The desks in force changed: apply now (launch, move), after the reload.
@@ -153,7 +155,7 @@ Item {
   // Desks a and b (1–9) of the edited set trade places; in the set in force their
   // bound windows follow after the reload.
   function swapDesks(a, b) {
-    if (a === b || !root.service || root.service.loadError !== "") return
+    if (a === b || root.locked || !root.service || root.service.loadError !== "") return
     if (root.capture) {
       root.capture = Object.assign({}, root.capture, { desks: Model.swapDesks({ workspaces: root.capture.desks }, "", a, b).workspaces })
       return
@@ -186,8 +188,8 @@ Item {
   }
   // Same order, schedule and desks; the active session keeps running under the new name.
   function renameSet(to) {
-    var r = Model.renameSession(root.service.raw, root.set, to, root.tr("Regular"))
-    root.renameHint = r.error === "empty" ? root.tr("Type a name") : r.error === "regular" ? root.tr("This name is taken by the regular desks")
+    var r = Model.renameSession(root.service.raw, root.set, to, root.tr("Empty session"))
+    root.renameHint = r.error === "empty" ? root.tr("Type a name") : r.error === "regular" ? root.tr("This name is taken by the empty session")
       : r.error === "exists" ? root.tr("A session with this name exists") : ""
     if (r.error) return false
     if (to.trim() !== root.set && root.service.loadError === "") { root.service.save(r.raw); root.set = to.trim() }
@@ -213,7 +215,7 @@ Item {
     id: captureTimer
     interval: 300
     onTriggered: {
-      root.target = root.set
+      root.target = root.set || root.newSet   // the empty session takes no desks
       root.draftFor(Model.captureDesks(root.service.windowsNow(), DesktopEntries.applications.values))
       root.pos = 0
     }
@@ -242,7 +244,7 @@ Item {
     if (root.target === root.newSet) { root.adding = true; root.focusNameField() }
     else confirmOverwrite.opened = true
   }
-  // The draft becomes set `name` ("" — the regular desks; its schedule stays)
+  // The draft becomes session `name` (its schedule stays)
   // and the set in force: its windows are already open, nothing to launch.
   function saveCapture(name, isNew) {
     name = name.trim()
@@ -250,18 +252,15 @@ Item {
       root.adding = false
       keyCatcher.forceActiveFocus()
       if (!name) return
-      if (root.cfg.sessions[name] || name.toLowerCase() === root.tr("Regular").toLowerCase() || name === "Regular") {
+      if (root.cfg.sessions[name] || name.toLowerCase() === root.tr("Empty session").toLowerCase() || name === "Empty session") {
         root.captureHint = root.tr("A session with this name exists"); return
       }
     }
     var desks = root.capture.desks
     root.edit(function(next) {
-      if (!name) next.workspaces = desks
-      else {
-        next.sessions = next.sessions || {}
-        var old = next.sessions[name]
-        next.sessions[name] = { workspaces: desks, schedule: old && old.schedule || null }
-      }
+      next.sessions = next.sessions || {}
+      var old = next.sessions[name]
+      next.sessions[name] = { workspaces: desks, schedule: old && old.schedule || null }
       next.activeSession = name
     })
     root.capture = null
@@ -333,7 +332,8 @@ Item {
   }
   function arrow(dx, dy) {
     if (root.page === "main") {
-      root.pos = Model.mainMove(root.pos, dx, dy, root.set !== "" && !root.capture, root.capture ? 2 : Number(root.gearHead.slice(4)) + 1, !!root.capture)
+      if (root.locked) root.pos = typeof root.pos === "number" ? "head0" : Model.mainMove(root.pos, dx, 0, false, Number(root.gearHead.slice(4)) + 1)
+      else root.pos = Model.mainMove(root.pos, dx, dy, root.set !== "" && !root.capture, root.capture ? 2 : Number(root.gearHead.slice(4)) + 1, !!root.capture)
       pointerGate.reset(); return
     }
     var r = root.rows[root.cursor]
@@ -357,7 +357,7 @@ Item {
   function activate() {
     if (root.confirming) { if (root.service.pendingPlan && root.service.phase === "") root.service.confirmSwitch(); return }
     if (root.page === "main") {
-      if (typeof root.pos === "number") root.openDesk(root.wsOf(root.pos))
+      if (typeof root.pos === "number") { if (!root.locked) root.openDesk(root.wsOf(root.pos)) }
       else if (root.pos === "sched") root.showPage("schedule")
       else if (root.pos === "save") root.askSave()
       else if (root.capture && root.pos === "head1") root.back()
@@ -395,13 +395,13 @@ Item {
       return
     }
     root.edit(function(next) {
-      var ds = root.set ? (next.sessions[root.set] || {}).workspaces : next.workspaces
+      var ds = (next.sessions[root.set] || {}).workspaces
       if (ds) delete ds[String(ws)]
     })
   }
 
   function remove() {
-    if (root.page === "main" && typeof root.pos === "number") { root.askClearDesk(root.wsOf(root.pos)); return }
+    if (root.page === "main" && typeof root.pos === "number") { if (!root.locked) root.askClearDesk(root.wsOf(root.pos)); return }
     var r = root.page === "main" ? null : root.rows[root.cursor]
     if (r && r.type === "places") root.setPlace(root.place, "")
     else if (r && r.type === "rule") root.removeRule(r.index)
@@ -537,7 +537,7 @@ Item {
             PanelHero {
               width: head.width
               title: root.title()
-              meta: root.confirming ? "" : root.capture && root.page === "main" ? root.tr("Now on the desks") : root.page === "schedule" ? root.set : root.cfg.activeSession || root.tr("No session")
+              meta: root.confirming ? "" : root.capture && root.page === "main" ? root.tr("Now on the desks") : root.page === "schedule" ? root.set : root.cfg.activeSession || root.tr("Empty session")
               foreground: root.fg
               fontFamily: root.font
               iconComponent: Text {
@@ -564,7 +564,7 @@ Item {
                   visible: root.page === "main" && !root.adding && !root.renaming
                   width: Style.space(180)
                   showLabel: false
-                  options: root.sets.map(function(n) { return { value: n, label: n || root.tr("Regular") } })
+                  options: (root.capture ? Object.keys(root.cfg.sessions) : root.sets).map(function(n) { return { value: n, label: n || root.tr("Empty session") } })
                     .concat([{ value: root.newSet, label: "+ " + root.tr("New session") }])
                   value: root.capture ? root.target : root.set
                   foreground: root.fg
@@ -681,9 +681,18 @@ Item {
               spacing: Style.spacing.xs
 
               Local.Tiles {
-                visible: root.page === "main"
+                visible: root.page === "main" && !root.locked
                 width: list.width
                 panel: root
+              }
+              Text {
+                visible: root.page === "main" && root.locked
+                width: list.width
+                text: root.tr("Windows and desks stay as they are, nothing is bound. To set up desks, create a session.")
+                color: root.dim
+                font.family: root.font
+                font.pixelSize: Style.font.body
+                wrapMode: Text.WordWrap
               }
 
               // The draft's footer: what won't be kept, why the name doesn't fit, and Save
@@ -703,7 +712,7 @@ Item {
                 width: list.width
                 bordered: true
                 text: root.target === root.newSet ? root.tr("Save the open windows as a new session")
-                  : root.tr("Save the open windows to %1", root.target || root.tr("Regular"))
+                  : root.tr("Save the open windows to %1", root.target)
                 foreground: root.fg
                 fontFamily: root.font
                 hasCursor: root.pos === "save"
@@ -737,7 +746,7 @@ Item {
         id: confirmOverwrite
         anchors.fill: parent
         z: 10
-        message: root.tr("Save the open windows to %1?", root.target || root.tr("Regular"))
+        message: root.tr("Save the open windows to %1?", root.target)
         cancelText: root.tr("Cancel")
         confirmText: root.tr("Save")
         foreground: root.fg

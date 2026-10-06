@@ -58,7 +58,7 @@ function normalize(raw) {
     else c[k] = typeof r[k] === typeof DEFAULTS[k] ? r[k] : DEFAULTS[k]
   })
   c.singleInstance = Array.isArray(r.singleInstance) ? r.singleInstance : []
-  c.workspaces = desks(r.workspaces)
+  c.workspaces = {}   // the empty session: always empty, config's plain desks aren't read
   c.sessions = {}
   Object.keys(r.sessions || {}).forEach(function(n) {
     var s = r.sessions[n]
@@ -175,7 +175,7 @@ function renameSession(raw, from, to, regularName) {
   var has = function(k) { return Object.prototype.hasOwnProperty.call(ss, k) }
   if (!has(from)) return { error: "missing" }
   if (!to) return { error: "empty" }
-  if (to.toLowerCase() === String(regularName || "").toLowerCase() || to === "Regular") return { error: "regular" }
+  if (to.toLowerCase() === String(regularName || "").toLowerCase() || to === "Empty session") return { error: "regular" }
   if (to !== from && has(to)) return { error: "exists" }
   var next = JSON.parse(JSON.stringify(raw)), out = {}
   Object.keys(ss).forEach(function(k) { out[k === from ? to : k] = next.sessions[k] })
@@ -304,8 +304,10 @@ function freeDesks(next, windows, count, from) {
 // next one doesn't have; move the next one's open apps to their desks; strangers on the
 // next session's desks go after its last desk; launch the missing apps by place order.
 function sessionPlan(c, from, to, windows) {
+  // To the empty session: the windows stay as they are.
+  if (!(to && c.sessions[to])) return { close: [], move: [], launch: [] }
   var prev = from && c.sessions[from] ? c.sessions[from].workspaces : {}
-  var next = to && c.sessions[to] ? c.sessions[to].workspaces : c.workspaces
+  var next = c.sessions[to].workspaces
   var prevCls = classesOf(prev), a = assign(next, windows)
   var nums = Object.keys(next).map(Number)
   var lastDesk = nums.length ? Math.max.apply(null, nums) : 0
