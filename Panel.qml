@@ -60,7 +60,7 @@ Item {
   readonly property var desk: desks[String(deskWs)] || null
   readonly property var sets: [""].concat(Object.keys(cfg.sessions))
   readonly property var apps: DesktopEntries.applications.values
-    .map(function(e) { return { label: e.name, value: e.id, cls: e.startupClass || e.id.replace(/\.desktop$/, "") } })
+    .map(function(e) { return { label: e.name, value: e.id, cls: Model.appClass(e) } })
     .sort(function(a, b) { return a.label.localeCompare(b.label) })
   readonly property bool typing: keyCatcher.Window.activeFocusItem !== null && keyCatcher.Window.activeFocusItem !== keyCatcher
   readonly property var choiceLabels: ({ tile: tr("Stays"), float: tr("Floating"), next: tr("Next desk"),

@@ -102,6 +102,17 @@ function appNameOf(cls, entries) {
 }
 // The desktop entry of a window class (same matching as appNameOf), null if none;
 // exact — only by startupClass or id, no guess by the last segment.
+// The class an app's windows get: StartupWMClass; a web app (omarchy-launch-webapp "https://host/path")
+// — Chromium's "chrome-host__path-Default"; else the id. Rules match it exactly.
+// ponytail: the "chrome-" prefix — omarchy-launch-webapp falls back to Chromium; with Brave/Edge
+// as the default browser the windows are "brave-…"/"msedge-…", read the browser if that happens.
+function appClass(e) {
+  if (e.startupClass) return e.startupClass
+  var u = String(e.execString || "").match(/omarchy-launch-webapp\s+"?https?:\/\/([^/"\s]+)([^"\s]*)/)
+  if (u) return "chrome-" + u[1] + "_" + (u[2] || "/").replace(/\//g, "_") + "-Default"
+  return String(e.id).replace(/\.desktop$/, "")
+}
+
 function entryOf(cls, entries, exact) {
   var lc = String(cls || "").toLowerCase(), last = lc.split(".").pop(), web = /__/.test(lc)
   var low = function(s) { return String(s || "").toLowerCase() }

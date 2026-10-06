@@ -1,7 +1,7 @@
 const assert = require("assert")
 const fs = require("fs")
 const M = new Function(fs.readFileSync(__dirname + "/Model.js", "utf8").replace(".pragma library", "") +
-  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks, schemeOf, singleGroup }")()
+  "; return { launchPlan, applyPlan, prettyClass, appNameOf, renameSession, fitSlots, setSlot, hasSlots, normalize, activeDesks, trimName, deskLabel, scheduleAt, overlaps, sessionPlan, freeDesks, PLACES, rows, step, scheduleError, mainMove, placeMove, isFree, dayRanges, swapDesks, swapMoves, captureDesks, mergeDesks, schemeOf, singleGroup, appClass, entryOf }")()
 
 // Desks as the active session "S" — the empty session ("") has none.
 const inS = (ws, extra) => M.normalize(Object.assign({ activeSession: "S", sessions: { S: { workspaces: ws } } }, extra))
@@ -277,3 +277,13 @@ assert.deepStrictEqual(sp.move, [{ addr: "a", ws: "special:scratchpad" }]); asse
 assert.deepStrictEqual(M.sessionPlan(sc, "", "S", []).launch.map(l => l.ws), ["2", "scratchpad"])
 assert.deepStrictEqual(M.captureDesks([{ class: "k", ws: "scratchpad" }], [{ id: "k.desktop", name: "K", startupClass: "k" }]).desks.scratchpad.slots[0].class, "k")
 console.log("ok scratchpad")
+// the class an app's windows get: StartupWMClass, a web app's Chromium class from its URL, else the id
+assert.strictEqual(M.appClass({ id: "Telemost", startupClass: "", execString: 'omarchy-launch-webapp "https://telemost.360.yandex.ru/"' }), "chrome-telemost.360.yandex.ru__-Default")
+assert.strictEqual(M.appClass({ id: "TS", execString: "omarchy-launch-webapp https://login.tailscale.com/admin/machines" }), "chrome-login.tailscale.com__admin_machines-Default")
+assert.strictEqual(M.appClass({ id: "X", execString: 'omarchy-launch-webapp "https://x.com"' }), "chrome-x.com__-Default")
+assert.strictEqual(M.appClass({ id: "org.gnome.Nautilus.desktop", startupClass: "", execString: "nautilus" }), "org.gnome.Nautilus")
+assert.strictEqual(M.appClass({ id: "code.desktop", startupClass: "Code", execString: "code" }), "Code")
+// a picked web app is found back by its window: entryOf agrees with appClass
+const tm = { id: "Telemost", name: "Telemost", startupClass: "", execString: 'omarchy-launch-webapp "https://telemost.360.yandex.ru/"' }
+assert.strictEqual(M.entryOf(M.appClass(tm), [tm], true), tm)
+console.log("ok appClass")
