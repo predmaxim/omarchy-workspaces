@@ -10,6 +10,8 @@ import "Model.js" as Model
 // the large scheme drawing under it. `panel` is the modal: state and edits.
 CursorSurface {
   id: row
+  // Fixed status colours (FixedColors.qml): a theme's red can be any colour.
+  readonly property QtObject fixedColors: FixedColors {}
   property var panel: null
 
   component Field: TextField {
@@ -70,7 +72,7 @@ CursorSurface {
       visible: text !== ""
       width: parent.width
       text: row.modelData.type === "to" ? row.panel.scheduleError : ""
-      color: Color.urgent
+      color: fixedColors.red
       font.family: row.panel.font
       font.pixelSize: Style.font.caption
       wrapMode: Text.WordWrap

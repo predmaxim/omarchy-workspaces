@@ -17,6 +17,8 @@ import "I18n.js" as I18n
 // Model.rows (PanelRow.qml); ↑/↓ rows, ←/→ value, Enter open/press, Esc back.
 Item {
   id: root
+  // Fixed status colours (FixedColors.qml): a theme's red can be any colour.
+  readonly property QtObject fixedColors: FixedColors {}
   property var host: null
   property var service: null
   property var screen: null
@@ -641,7 +643,7 @@ Item {
               visible: root.page === "main" && text !== ""
               width: head.width
               text: root.renameHint || root.setHint
-              color: Color.urgent
+              color: fixedColors.red
               font.family: root.font
               font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
@@ -650,7 +652,7 @@ Item {
               visible: !root.confirming && root.service && root.service.loadError !== ""
               width: head.width
               text: root.service ? root.tr("config.json is broken, edits are off: %1", root.service.loadError) : ""
-              color: Color.urgent
+              color: fixedColors.red
               font.family: root.font
               font.pixelSize: Style.font.caption
               wrapMode: Text.WordWrap
@@ -702,7 +704,7 @@ Item {
                 width: list.width
                 topPadding: Style.space(6)
                 text: root.captureHint || (root.capture ? root.tr("Not saved: %1", root.capture.lost.map(Model.prettyClass).join(", ")) : "")
-                color: root.captureHint ? Color.urgent : root.dim
+                color: root.captureHint ? fixedColors.red : root.dim
                 font.family: root.font
                 font.pixelSize: Style.font.caption
                 wrapMode: Text.WordWrap
