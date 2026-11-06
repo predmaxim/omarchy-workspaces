@@ -26,16 +26,26 @@ end
 
 function M.mode(cfg) return cfg.activeSession and cfg.collapseInSession or cfg.collapse end
 
-function M.run(get_cfg, fixed_of)
+-- Each monitor's own desks collapse among themselves (Omarchy 4.5: a block of
+-- `slots` workspace ids per monitor). The bar learns renumbered workspaces from
+-- changeworkspaceid (Omarchy's Workspaces.qml asks Hyprland again).
+function M.run(get_cfg, fixed_of, slots)
   local cfg = get_cfg()
   local mode = M.mode(cfg)
-  local list = {}
-  for _, w in ipairs(hl.get_workspaces()) do list[#list + 1] = { id = w.id, windows = w.windows } end
-  local moves = M.plan(list, mode, fixed_of(cfg))
-  for _, m in ipairs(moves) do hl.dispatch(hl.dsp.workspace.change_id({ workspace = m[1], id = m[2] })) end
-  -- The bar (Quickshell 0.3) ignores changeworkspaceid and re-reads workspaces only on configreloaded.
-  -- ponytail: drop this reload once Quickshell handles changeworkspaceid.
-  if #moves > 0 then hl.exec_cmd("hyprctl reload") end
+  if mode == "off" then return end
+  local blocks = {}
+  for _, m in ipairs(hl.get_monitors()) do
+    if not m.is_mirror then blocks[(o.workspaces.workspace_id(m, 1) - 1) // slots] = true end
+  end
+  for block in pairs(blocks) do
+    local base, list = block * slots, {}
+    for _, w in ipairs(hl.get_workspaces()) do
+      if w.id > 0 and (w.id - 1) // slots == block then list[#list + 1] = { id = w.id - base, windows = w.windows } end
+    end
+    for _, m in ipairs(M.plan(list, mode, fixed_of(cfg))) do
+      hl.dispatch(hl.dsp.workspace.change_id({ workspace = tostring(base + m[1]), id = base + m[2] }))
+    end
+  end
 end
 
 return M

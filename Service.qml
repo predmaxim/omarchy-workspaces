@@ -26,6 +26,33 @@ Item {
   property var stuck: []
   property var launchQueue: []
 
+  // Omarchy 4.5 gives every monitor desks 1-10 of its own, a block of ten workspace
+  // ids each; sessions live on the focused monitor's desks. Connector -> block, from
+  // the file Hyprland keeps them in, read as Omarchy's Workspaces.qml reads it.
+  readonly property int slots: 10
+  property var blocks: ({})
+  FileView {
+    path: (Quickshell.env("XDG_STATE_HOME") || Quickshell.env("HOME") + "/.local/state") + "/omarchy/monitor-workspaces"
+    watchChanges: true
+    printErrors: false
+    onFileChanged: reload()
+    onLoaded: {
+      var next = {}
+      String(text() || "").split("\n").forEach(function(line) {
+        var f = line.split("\t")
+        if (f.length >= 3 && f[1] !== "") next[f[1]] = parseInt(f[0], 10)
+      })
+      root.blocks = next
+    }
+  }
+  // A workspace id as a desk of the focused monitor: its slot, 0 when it is another
+  // monitor's (the plans leave such windows where they are).
+  function deskOf(id) {
+    var m = Hyprland.focusedMonitor, block = m ? root.blocks[m.name] : undefined
+    if (block === undefined) block = m && m.activeWorkspace ? Math.floor((m.activeWorkspace.id - 1) / root.slots) : 0
+    return id > 0 && Math.floor((id - 1) / root.slots) === block ? (id - 1) % root.slots + 1 : 0
+  }
+
   FileView {
     id: file
     path: root.path
@@ -90,12 +117,14 @@ Item {
       var o = t.lastIpcObject || {}
       var a = String(t.address)
       return { address: a.indexOf("0x") === 0 ? a : "0x" + a, class: o.class || "", title: o.title || "",
-               ws: !t.workspace ? 0 : t.workspace.name === "special:scratchpad" ? "scratchpad" : t.workspace.id,
+               ws: !t.workspace ? 0 : t.workspace.name === "special:scratchpad" ? "scratchpad" : root.deskOf(t.workspace.id),
                at: o.at, size: o.size, floating: !!o.floating }
     })
   }
 
   function dispatch(expr) { Quickshell.execDetached(["hyprctl", "dispatch", expr]) }
+  // To a desk of the focused monitor: hypr/init.lua resolves it through Omarchy.
+  function moveWindow(addr, ws) { root.dispatch("predmaxim_workspaces.move(" + JSON.stringify(String(addr)) + ", " + JSON.stringify(String(ws)) + ")") }
 
   // ------------------------------------------------------------ switching
 
@@ -198,7 +227,7 @@ Item {
     var ok = root.save(next, function(saved) {
       if (!saved) { root.phase = ""; root.plan = null; return }
       moves.forEach(function(m) {
-        root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+        root.moveWindow(m.addr, m.ws)
       })
       root.launchQueue = root.plan.launch.slice()
       root.launchNext()
@@ -216,7 +245,7 @@ Item {
     p.launch = p.launch.filter(function(l) { return !(Date.now() - (root.launchedAt[l.class] || 0) < 15000) })
     p.launch.forEach(function(l) { root.launchedAt[l.class] = Date.now() })
     p.move.forEach(function(m) {
-      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+      root.moveWindow(m.addr, m.ws)
     })
     if (!p.launch.length) return
     root.phase = "launching"
@@ -229,7 +258,7 @@ Item {
   function moveSwapped(a, b) {
     if (root.busy() || root.loadError !== "") return
     Model.swapMoves(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow(), a, b).forEach(function(m) {
-      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+      root.moveWindow(m.addr, m.ws)
     })
   }
 
@@ -254,7 +283,7 @@ Item {
     if (root.busy()) return
     var p = Model.launchPlan(root.cfg, root.cfg.sessions[root.cfg.activeSession] ? root.cfg.activeSession : "", root.windowsNow())
     p.move.forEach(function(m) {
-      root.dispatch('hl.dsp.window.move({ window = "address:' + m.addr + '", workspace = "' + m.ws + '", follow = false })')
+      root.moveWindow(m.addr, m.ws)
     })
     p.launch = p.launch.filter(function(l) { return !(Date.now() - (root.launchedAt[l.class] || 0) < 15000) })
     if (!p.launch.length) return

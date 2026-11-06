@@ -9,9 +9,10 @@ import "Model.js" as Model
 import "I18n.js" as I18n
 import "." as Local
 
-// predmaxim.workspaces on the bar: [session ▾] then the desks as the stock widget
-// draws them, with names ("2 Firefox", ≤ 50 chars). Session click — the list of
-// sessions; desk click — go there; right click — the settings modal.
+// predmaxim.workspaces on the bar: [session ▾] then Omarchy's own desk row (Desks.qml:
+// its Workspaces.qml with desks.patch, built by ./sync-desks), which asks this widget
+// for desk names ("2 Firefox", ≤ 50 chars) and the desks with bindings. Session
+// click — the list of sessions; desk click — go there; right click — the settings modal.
 Panel {
   id: root
   moduleName: "predmaxim.workspaces"
@@ -42,34 +43,23 @@ Panel {
   readonly property var actionRows: [{ key: "capture", icon: "󰄀", text: tr("Take the open windows") }, { key: "edit", icon: "󰒓", text: tr("Set up sessions") }]
   property int cursor: 0
 
-  function workspaceById(id) {
-    var values = Hyprland.workspaces.values
-    for (var i = 0; i < values.length; i++) {
-      if (values[i].id === id) return values[i]
-    }
-    return null
-  }
-
-  function workspaceIds() {
-    var ids = [1, 2, 3, 4, 5]
-    var values = Hyprland.workspaces.values
-    for (var i = 0; i < values.length; i++) {
-      var id = values[i].id
-      if (id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
-    }
-    // Desks with bindings or an own name show even when empty.
-    Object.keys(root.desks).forEach(function(ws) {
-      var d = root.desks[ws], id = Number(ws)
-      if ((d.slots.length || d.name.mode === "static") && id > 0 && id <= 10 && ids.indexOf(id) === -1) ids.push(id)
+  // For the desk row (Desks.qml). Desks with bindings or an own name show even when empty.
+  function shownSlots() {
+    return Object.keys(root.desks).map(Number).filter(function(slot) {
+      var d = root.desks[slot]
+      return slot > 0 && slot <= 10 && (d.slots.length || d.name.mode === "static")
     })
-    ids.sort(function(left, right) { return left - right })
-    return ids
   }
 
-  function focusWorkspace(id) {
-    if (!root.bar) return
-    root.bar.run("hyprctl dispatch " + Util.shellQuote("hl.dsp.focus({ workspace = \"" + id + "\" })"))
+  // The name after the desk's number ("Firefox"), "" for none.
+  function deskName(slot, workspace) {
+    var label = Model.deskLabel(slot, root.desks[slot], root.windowsOf(workspace), root.appName)
+    return label === String(slot) ? "" : label.slice(String(slot).length + 1)
   }
+
+  // Super + L asks every instance of the row's widget to read the layout again
+  // (BarWidget.broadcast); the row is ours, so pass it on.
+  function refresh() { if (desks.item) desks.item.refresh() }
 
   function appName(cls) { return Model.appNameOf(cls, DesktopEntries.applications.values) }
 
@@ -93,15 +83,12 @@ Panel {
     root.service.requestSession(sessionRows[i])
   }
 
-  readonly property real trailingGap: root.vertical ? 0 : Style.spaceReal(1.5)
-
-  implicitWidth: row.implicitWidth + trailingGap
+  implicitWidth: row.implicitWidth
   implicitHeight: row.implicitHeight
 
   RowLayout {
     id: row
     anchors.fill: parent
-    anchors.rightMargin: root.trailingGap
     spacing: Style.space(1)
 
     WidgetButton {
@@ -118,37 +105,17 @@ Panel {
       }
     }
 
-    GridLayout {
-      id: grid
-      columns: root.vertical ? 1 : root.workspaceIds().length
-      columnSpacing: root.vertical ? 0 : Style.space(1)
-      rowSpacing: root.vertical ? Style.space(2) : 0
-
-      Repeater {
-        model: root.workspaceIds()
-
-        WidgetButton {
-          required property int modelData
-
-          readonly property var workspace: root.workspaceById(modelData)
-          readonly property bool occupied: workspace !== null && workspace.toplevels.values.length > 0
-          readonly property bool focused: Hyprland.focusedWorkspace !== null && Hyprland.focusedWorkspace.id === modelData
-          readonly property string label: Model.deskLabel(modelData, root.desks[modelData], root.windowsOf(workspace), root.appName)
-          readonly property string number: modelData === 10 ? "0" : String(modelData)
-          readonly property bool named: label !== String(modelData)
-
-          bar: root.bar
-          text: focused ? "󱓻" + (named ? label.slice(String(modelData).length) : "") : (named ? label : number)
-          opacity: occupied || focused ? 1 : 0.5
-          horizontalMargin: 6
-          verticalPadding: 6
-          fixedWidth: root.vertical ? root.barSize : (named ? -1 : Style.space(20))
-          fixedHeight: root.barSize
-          onPressed: function(button) {
-            if (button === Qt.RightButton) root.toggle()
-            else root.focusWorkspace(modelData)
-          }
-        }
+    // Without Desks.qml (not built yet, or desks.patch no longer fits) Omarchy's row as it is.
+    Loader {
+      id: desks
+      source: Qt.resolvedUrl("Desks.qml")
+      onStatusChanged: {
+        if (status === Loader.Error) source = "file://" + Quickshell.env("OMARCHY_PATH") + "/shell/plugins/bar/widgets/Workspaces.qml"
+      }
+      onLoaded: {
+        item.bar = Qt.binding(function() { return root.bar })
+        item.moduleName = root.moduleName
+        if (item.host !== undefined) item.host = root
       }
     }
   }

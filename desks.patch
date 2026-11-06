@@ -1,0 +1,42 @@
+--- Workspaces.qml
++++ Desks.qml
+@@ -16,6 +16,10 @@
+   // numbered 1-10, and the one that monitor shows, whichever monitor has focus.
+   readonly property int slots: 10
+ 
++  // predmaxim.workspaces: its bar widget, which names the desks, shows the ones
++  // with bindings and opens its settings on a right click. Null: the stock row.
++  property var host: null
++
+   readonly property var monitor: {
+     var window = root.QsWindow.window
+     var screen = window ? window.screen : null
+@@ -81,6 +85,7 @@
+   function workspaceIds() {
+     var base = root.block * root.slots
+     var ids = [base + 1, base + 2, base + 3, base + 4, base + 5]
++    if (root.host) root.host.shownSlots().forEach(function(slot) { if (ids.indexOf(base + slot) === -1) ids.push(base + slot) })
+     var guests = []
+     var values = Hyprland.workspaces.values
+ 
+@@ -270,14 +275,16 @@
+         Layout.topMargin: firstGuest && root.vertical ? Style.space(6) : 0
+ 
+         bar: root.bar
+-        text: shown ? root.modeGlyph(root.activeMode) : (slot === root.slots ? "0" : String(slot))
++        readonly property string name: root.host && root.blockOf(modelData) === root.block ? root.host.deskName(slot, workspace) : ""
++        text: (shown ? root.modeGlyph(root.activeMode) : (slot === root.slots ? "0" : String(slot))) + (name ? " " + name : "")
+         opacity: occupied || shown ? 1 : 0.5
+         horizontalMargin: 6
+         verticalPadding: 6
+-        fixedWidth: root.vertical ? root.barSize : Style.space(20)
++        fixedWidth: root.vertical ? root.barSize : (name ? -1 : Style.space(20))
+         fixedHeight: root.barSize
+-        onPressed: function() {
+-          if (shown) root.cycleLayout()
++        onPressed: function(button) {
++          if (button === Qt.RightButton && root.host) root.host.toggle()
++          else if (shown) root.cycleLayout()
+           else root.focusWorkspace(modelData)
+         }
+         onWheelMoved: function(delta) { root.scrollWorkspaces(delta) }

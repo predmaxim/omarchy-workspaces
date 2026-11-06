@@ -62,6 +62,5 @@ for _, r in ipairs(bind.rules(sp)) do
   if r.class == "^(f)$" then assert(r.workspace == "2") end
 end
 assert(bind.target(sp, "f", { ["2"] = 1 }) == "scratchpad")
-assert(bind.key({ id = -98, name = "special:scratchpad" }) == "scratchpad" and bind.key({ id = 3, name = "3" }) == "3")
 print("ok scratchpad")
 

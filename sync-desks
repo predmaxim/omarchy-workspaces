@@ -1,0 +1,20 @@
+#!/bin/bash
+# Build Desks.qml, the desk row on the bar: Omarchy's own Workspaces.qml with
+# desks.patch on top (names, desks with bindings, right click for settings), so
+# every Omarchy update brings its row along. Run after installing and after each
+# Omarchy update. If the patch no longer fits the new Workspaces.qml, Desks.qml is
+# removed and the bar shows Omarchy's row as it is until desks.patch is updated.
+set -uo pipefail
+cd "$(dirname "$(realpath "$0")")"
+
+stock=$OMARCHY_PATH/shell/plugins/bar/widgets/Workspaces.qml
+tmp=$(mktemp)
+trap 'rm -f "$tmp" "$tmp.orig" "$tmp.rej"' EXIT
+
+if cp "$stock" "$tmp" && patch --quiet --fuzz=0 --no-backup-if-mismatch "$tmp" desks.patch >/dev/null; then
+  cmp -s "$tmp" Desks.qml || cp "$tmp" Desks.qml
+else
+  rm -f Desks.qml
+  echo "predmaxim.workspaces: desks.patch no longer fits $stock; the bar shows Omarchy's own row" >&2
+  exit 1
+fi

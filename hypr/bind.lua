@@ -7,8 +7,6 @@ local function regex(class) return "^(" .. class:gsub("[%-%.%+%*%?%[%]%(%)%^%$|\
 -- The scratchpad desk ("scratchpad" in config.json) is Hyprland's special:scratchpad.
 M.SCRATCH = "scratchpad"
 function M.hypr_ws(key) return key == M.SCRATCH and "special:" .. M.SCRATCH or key end
--- The desk key of a Hyprland workspace {id, name}.
-function M.key(ws) return ws.name == "special:" .. M.SCRATCH and M.SCRATCH or tostring(ws.id) end
 
 local function ordered(desks)
   local ids = {}
